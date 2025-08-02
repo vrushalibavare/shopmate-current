@@ -69,6 +69,19 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Deploy Infrastructure with Terraform
+      working-directory: terraform/environments/uat
+      run: |
+        terraform init
+        terraform apply -auto-approve \
+          -var="image_tag=initial" \
+          -var="environment=${{ env.ENVIRONMENT }}"
+
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
@@ -81,15 +94,9 @@ jobs:
         docker buildx build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.5.0
-
-    - name: Deploy with Terraform
+    - name: Update ECS Service with new image
       working-directory: terraform/environments/uat
       run: |
-        terraform init
         terraform apply -auto-approve \
           -var="image_tag=${{ github.sha }}" \
           -var="environment=${{ env.ENVIRONMENT }}"
