@@ -15,8 +15,9 @@ for env in "${ENVIRONMENTS[@]}"; do
     if terraform fmt -check; then
         echo "    ✅ Format check passed"
     else
-        echo "    ❌ Format check failed"
-        terraform fmt -diff
+        echo "    ❌ Format check failed - fixing..."
+        terraform fmt
+        echo "    🔧 Format fixed! Commit the changes."
     fi
     
     echo "  - Initializing..."
@@ -39,3 +40,4 @@ done
 
 echo ""
 echo "🏁 Terraform validation complete!"
+echo "💡 If format was fixed, run: git add terraform/ && git commit -m 'Fix Terraform formatting'"

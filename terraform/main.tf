@@ -97,9 +97,9 @@ resource "aws_ecr_lifecycle_policy" "shopmate" {
         rulePriority = 1
         description  = "Keep last 10 tagged images"
         selection = {
-          tagStatus     = "tagged"
-          countType     = "imageCountMoreThan"
-          countNumber   = 10
+          tagStatus   = "tagged"
+          countType   = "imageCountMoreThan"
+          countNumber = 10
         }
         action = {
           type = "expire"
@@ -129,7 +129,7 @@ resource "aws_ecs_cluster" "shopmate" {
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "shopmate" {
-  name = "/ecs/shopmate-${var.environment}"
+  name              = "/ecs/shopmate-${var.environment}"
   retention_in_days = 30
 }
 
@@ -141,7 +141,7 @@ resource "random_password" "session_secret" {
 
 # Secrets Manager for session secret
 resource "aws_secretsmanager_secret" "session_secret" {
-  name = "shopmate-session-secret-${var.environment}"
+  name        = "shopmate-session-secret-${var.environment}"
   description = "Session secret for ShopMate ${var.environment}"
 }
 
@@ -152,10 +152,10 @@ resource "aws_secretsmanager_secret_version" "session_secret" {
 
 # DynamoDB Tables
 resource "aws_dynamodb_table" "products" {
-  name           = "shopmate-products-${var.environment}"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "id"
-  
+  name         = "shopmate-products-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
   attribute {
     name = "id"
     type = "N"
@@ -163,10 +163,10 @@ resource "aws_dynamodb_table" "products" {
 }
 
 resource "aws_dynamodb_table" "orders" {
-  name           = "shopmate-orders-${var.environment}"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "id"
-  
+  name         = "shopmate-orders-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
   attribute {
     name = "id"
     type = "N"
@@ -174,10 +174,10 @@ resource "aws_dynamodb_table" "orders" {
 }
 
 resource "aws_dynamodb_table" "carts" {
-  name           = "shopmate-carts-${var.environment}"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "userId"
-  
+  name         = "shopmate-carts-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
   attribute {
     name = "userId"
     type = "S"
@@ -270,7 +270,7 @@ resource "aws_iam_policy" "secrets_access" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Effect = "Allow"
+        Effect   = "Allow"
         Resource = aws_secretsmanager_secret.session_secret.arn
       }
     ]
@@ -289,32 +289,32 @@ resource "aws_iam_role_policy_attachment" "task_role_secrets" {
 
 # VPC Configuration
 resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
+  cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support   = true
-  
+
   tags = {
     Name = "shopmate-vpc-${var.environment}"
   }
 }
 
 resource "aws_subnet" "public_a" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = "${var.aws_region}a"
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = true
-  
+
   tags = {
     Name = "shopmate-public-a-${var.environment}"
   }
 }
 
 resource "aws_subnet" "public_b" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.2.0/24"
-  availability_zone = "${var.aws_region}b"
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "${var.aws_region}b"
   map_public_ip_on_launch = true
-  
+
   tags = {
     Name = "shopmate-public-b-${var.environment}"
   }
@@ -322,7 +322,7 @@ resource "aws_subnet" "public_b" {
 
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
-  
+
   tags = {
     Name = "shopmate-igw-${var.environment}"
   }
@@ -330,12 +330,12 @@ resource "aws_internet_gateway" "main" {
 
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
-  
+
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.main.id
   }
-  
+
   tags = {
     Name = "shopmate-public-rt-${var.environment}"
   }
@@ -401,14 +401,14 @@ resource "aws_ecs_task_definition" "shopmate" {
       name      = "shopmate"
       image     = "${aws_ecr_repository.shopmate.repository_url}:latest"
       essential = true
-      
+
       portMappings = [
         {
           containerPort = 3000
           protocol      = "tcp"
         }
       ]
-      
+
       environment = [
         {
           name  = "NODE_ENV"
@@ -419,14 +419,14 @@ resource "aws_ecs_task_definition" "shopmate" {
           value = "3000"
         },
       ]
-      
+
       secrets = [
         {
           name      = "SESSION_SECRET"
           valueFrom = aws_secretsmanager_secret.session_secret.arn
         }
       ]
-      
+
       environment = [
         {
           name  = "PRODUCTS_TABLE"
@@ -445,7 +445,7 @@ resource "aws_ecs_task_definition" "shopmate" {
           value = var.aws_region
         }
       ]
-      
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -473,7 +473,7 @@ resource "aws_lb_target_group" "shopmate" {
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
-  
+
   health_check {
     path                = "/health"
     healthy_threshold   = 3
@@ -562,8 +562,8 @@ resource "aws_ecs_service" "shopmate" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-    security_groups = [aws_security_group.shopmate.id]
+    subnets          = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+    security_groups  = [aws_security_group.shopmate.id]
     assign_public_ip = true
   }
 
@@ -656,9 +656,9 @@ resource "aws_cloudwatch_dashboard" "shopmate" {
         width  = 12
         height = 6
         properties = {
-          query   = "SOURCE '${aws_cloudwatch_log_group.shopmate.name}' | fields @timestamp, @message | filter @message like /order/ | sort @timestamp desc | limit 50"
-          region  = var.aws_region
-          title   = "Order Activity Logs"
+          query  = "SOURCE '${aws_cloudwatch_log_group.shopmate.name}' | fields @timestamp, @message | filter @message like /order/ | sort @timestamp desc | limit 50"
+          region = var.aws_region
+          title  = "Order Activity Logs"
         }
       }
     ]
