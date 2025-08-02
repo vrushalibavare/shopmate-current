@@ -1,16 +1,25 @@
 name: Deploy to Production
 
 on:
-  push:
+  pull_request:
     branches: [ production ]
+    types: [ closed ]
+
+jobs:
+  check-source:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'production' && github.event.pull_request.head.ref == 'stage'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source branch
+        run: echo "PR from stage to production approved"
 
 env:
   AWS_REGION: ap-southeast-1
   ECR_REPOSITORY: shopmate
   ENVIRONMENT: prod
 
-jobs:
   deploy:
+    needs: check-source
     runs-on: ubuntu-latest
     environment: production
     
