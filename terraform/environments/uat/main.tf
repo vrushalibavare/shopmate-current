@@ -1,3 +1,12 @@
+terraform {
+  backend "s3" {
+    bucket  = "sctp-ce10-tfstate"
+    key     = "shopmate/uat/terraform.tfstate"
+    region  = "ap-southeast-1"
+    encrypt = true
+  }
+}
+
 module "shopmate" {
   source = "../../"
 
