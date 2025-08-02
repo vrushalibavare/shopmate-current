@@ -399,7 +399,7 @@ resource "aws_ecs_task_definition" "shopmate" {
   container_definitions = jsonencode([
     {
       name      = "shopmate"
-      image     = "${aws_ecr_repository.shopmate.repository_url}:latest"
+      image     = "${aws_ecr_repository.shopmate.repository_url}:${var.image_tag}"
       essential = true
 
       portMappings = [

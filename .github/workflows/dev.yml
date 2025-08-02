@@ -64,12 +64,12 @@ jobs:
       with:
         terraform_version: 1.5.0
 
-    - name: Deploy Infrastructure with Terraform
+    - name: Create ECR Repository
       working-directory: terraform/environments/dev
       run: |
         terraform init
-        terraform apply -auto-approve \
-          -var="image_tag=initial" \
+        terraform apply -auto-approve -target=aws_ecr_repository.shopmate \
+          -var="image_tag=latest" \
           -var="environment=${{ env.ENVIRONMENT }}"
 
     - name: Login to Amazon ECR
@@ -86,7 +86,7 @@ jobs:
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-    - name: Update ECS Service with new image
+    - name: Deploy with Terraform
       working-directory: terraform/environments/dev
       run: |
         terraform apply -auto-approve \
