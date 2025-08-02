@@ -5,6 +5,11 @@ on:
     branches: [ stage ]
     types: [ closed ]
 
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: shopmate
+  ENVIRONMENT: uat
+
 jobs:
   check-source:
     if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'stage' && github.event.pull_request.head.ref == 'dev'
@@ -13,13 +18,43 @@ jobs:
       - name: Validate source branch
         run: echo "PR from dev to stage approved"
 
-env:
-  AWS_REGION: ap-southeast-1
-  ECR_REPOSITORY: shopmate
-  ENVIRONMENT: uat
+  validate:
+    needs: check-source
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+
+    - name: Terraform Format Check
+      working-directory: terraform/environments/uat
+      run: terraform fmt -check
+
+    - name: Terraform Init
+      working-directory: terraform/environments/uat
+      run: terraform init
+
+    - name: Terraform Validate
+      working-directory: terraform/environments/uat
+      run: terraform validate
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform Plan
+      working-directory: terraform/environments/uat
+      run: terraform plan
 
   deploy:
-    needs: check-source
+    needs: validate
     runs-on: ubuntu-latest
     environment: staging
     
