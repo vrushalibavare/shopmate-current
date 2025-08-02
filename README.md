@@ -186,6 +186,17 @@ aws ecs list-tasks --cluster shopmate-dev --region ap-southeast-1
 - `Dockerfile` - Docker configuration
 - `docker-compose.yml` - Docker Compose configuration
 - `terraform/` - Infrastructure as Code for AWS deployment
+- `docs/` - Complete project documentation
+- `scripts/` - Utility scripts for testing and monitoring
+
+## Documentation
+
+Complete documentation is available in the [`docs/`](docs/) directory:
+
+- **[CI/CD Workflows](docs/CICD-WORKFLOWS.md)** - Deployment and workflow documentation
+- **[Infrastructure](docs/TERRAFORM_DOCUMENTATION.md)** - Terraform and AWS setup
+- **[Auto-scaling](docs/AUTOSCALING_GUIDE.md)** - Scaling configuration and testing
+- **[Security](docs/SECURITY_FIXES.md)** - Security improvements and guidelines
 
 ## License
 

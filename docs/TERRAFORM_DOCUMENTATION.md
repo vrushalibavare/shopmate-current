@@ -121,6 +121,7 @@ resource "aws_route53_record" "shopmate" {
 
 ## Container Registry
 
+### ECR Repository
 ```hcl
 resource "aws_ecr_repository" "shopmate" {
   name                 = "shopmate"
@@ -129,6 +130,49 @@ resource "aws_ecr_repository" "shopmate" {
 ```
 - Creates ECR repository for Docker images
 - `MUTABLE` allows overwriting tags (useful for development)
+- **Shared across environments**: All environments (dev/uat/prod) use the same repository
+
+### ECR Lifecycle Policy
+```hcl
+resource "aws_ecr_lifecycle_policy" "shopmate" {
+  repository = aws_ecr_repository.shopmate.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 10 tagged images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["v", "latest"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 10
+        }
+        action = {
+          type = "expire"
+        }
+      },
+      {
+        rulePriority = 2
+        description  = "Delete untagged images after 1 day"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 1
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+```
+- **Automatic cleanup**: Keeps only the last 10 tagged images
+- **Untagged cleanup**: Removes untagged images after 1 day
+- **Cost optimization**: Prevents unlimited image accumulation
+- **Tag prefix support**: Handles versioned tags (v1.0.0) and latest
 
 ## ECS Configuration
 
@@ -513,6 +557,27 @@ resource "aws_lb" "shopmate" {
 - Deployed across multiple AZs for high availability
 - Uses the security group for traffic control
 
+## State Management
+
+### S3 Backend Configuration
+```hcl
+terraform {
+  backend "s3" {
+    bucket  = "sctp-ce10-tfstate"
+    key     = "shopmate/{environment}/terraform.tfstate"
+    region  = "ap-southeast-1"
+    encrypt = true
+  }
+}
+```
+- **Remote state storage**: Terraform state stored in S3 bucket
+- **Environment isolation**: Separate state files per environment
+  - Dev: `shopmate/dev/terraform.tfstate`
+  - UAT: `shopmate/uat/terraform.tfstate`
+  - Prod: `shopmate/prod/terraform.tfstate`
+- **Encryption**: State files encrypted at rest
+- **Shared access**: Multiple developers can access same state
+
 ## Environment Variables Explained
 
 The application receives these environment variables and secrets:
@@ -547,8 +612,10 @@ The infrastructure has these key dependencies:
 1. **DynamoDB**: Pay-per-request billing
 2. **Fargate**: Pay only for running tasks
 3. **CloudWatch**: 30-day log retention
-4. **ECR**: Lifecycle policies can be added
+4. **ECR**: Lifecycle policies automatically clean up old images
 5. **Load Balancer**: Single ALB serves all traffic
+6. **Shared ECR**: Single repository used across all environments
+7. **S3 State**: Centralized state storage reduces duplication
 
 ## Security Best Practices
 
@@ -561,4 +628,41 @@ The infrastructure has these key dependencies:
 7. **Logging**: All container logs sent to CloudWatch
 8. **Resource Tagging**: Environment-based resource naming
 
-This infrastructure provides a production-ready, scalable, and secure foundation for the ShopMate e-commerce application.
+## Deployment Architecture
+
+### Image Promotion Strategy
+```
+Dev Environment:
+├── Build Docker image (commit SHA + latest)
+├── Push to shared ECR repository
+└── Deploy to dev ECS cluster
+
+Staging Environment:
+├── Reuse image from dev (no rebuild)
+└── Deploy to uat ECS cluster
+
+Production Environment:
+├── Reuse image from dev (no rebuild)
+└── Deploy to prod ECS cluster
+```
+
+### Benefits:
+- **Faster deployments**: No rebuild time for staging/production
+- **Consistent artifacts**: Same tested image across environments
+- **Cost efficiency**: Reduced CI/CD build minutes
+- **Shared resources**: ECR repository used by all environments
+
+### Environment-Specific Resources:
+- **VPC and networking**: Isolated per environment
+- **ECS clusters**: Separate clusters per environment
+- **DynamoDB tables**: Environment-specific naming
+- **IAM roles**: Environment-specific permissions
+- **Load balancers**: Separate ALBs per environment
+- **Domains**: Environment-specific subdomains
+
+### Shared Resources:
+- **ECR repository**: Single `shopmate` repository
+- **S3 state bucket**: Shared with environment-specific keys
+- **Route53 zone**: Shared parent zone (`sctp-sandbox.com`)
+
+This infrastructure provides a production-ready, scalable, and secure foundation for the ShopMate e-commerce application with optimized CI/CD workflows and cost-effective resource sharing.

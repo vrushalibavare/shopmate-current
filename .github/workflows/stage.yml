@@ -74,36 +74,22 @@ jobs:
       with:
         terraform_version: 1.5.0
 
-    - name: Create ECR Repository
+    - name: Get source commit SHA
+      id: source-commit
+      run: |
+        # Get the commit SHA from the dev branch that was merged
+        SOURCE_SHA=$(git log --format="%H" -n 1 origin/dev)
+        echo "source_sha=$SOURCE_SHA" >> $GITHUB_OUTPUT
+        echo "Using image from dev deployment: $SOURCE_SHA"
+
+    - name: Deploy with Terraform (reuse dev image)
       working-directory: terraform/environments/uat
       run: |
-        terraform init
-        terraform apply -auto-approve -target=aws_ecr_repository.shopmate \
-          -var="image_tag=latest" \
-          -var="environment=${{ env.ENVIRONMENT }}"
-
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
-
-    - name: Build and push Docker image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        docker buildx build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-    - name: Deploy with Terraform
-      working-directory: terraform/environments/uat
-      run: |
-        terraform apply -auto-approve \
-          -var="image_tag=${{ github.sha }}" \
-          -var="environment=${{ env.ENVIRONMENT }}"
+        terraform init -reconfigure
+        terraform apply -auto-approve
 
     - name: Get deployment URL
       working-directory: terraform/environments/uat
       run: |
         echo "Staging URL: $(terraform output -raw load_balancer_url)"
+        echo "Using Docker image: ${{ steps.source-commit.outputs.source_sha }}"

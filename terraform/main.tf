@@ -85,6 +85,8 @@ resource "aws_route53_record" "shopmate" {
 resource "aws_ecr_repository" "shopmate" {
   name                 = "shopmate"
   image_tag_mutability = "MUTABLE"
+
+
 }
 
 # ECR Lifecycle Policy
