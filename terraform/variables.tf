@@ -10,12 +10,6 @@ variable "environment" {
   default     = "dev"
 }
 
-variable "image_tag" {
-  description = "Docker image tag to deploy"
-  type        = string
-  default     = "latest"
-}
-
 variable "app_count" {
   description = "Number of instances of the task to run"
   type        = number
