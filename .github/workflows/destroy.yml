@@ -40,6 +40,18 @@ jobs:
       with:
         terraform_version: 1.5.0
 
+    - name: Clean up ECR images (required for destroy)
+      run: |
+        echo "Deleting ECR images to allow repository destruction..."
+        aws ecr list-images --repository-name shopmate --region ${{ env.AWS_REGION }} --query 'imageIds[*]' --output json > images.json
+        if [ -s images.json ] && [ "$(cat images.json)" != "[]" ]; then
+          aws ecr batch-delete-image --repository-name shopmate --region ${{ env.AWS_REGION }} --image-ids file://images.json
+          echo "✅ ECR images deleted"
+        else
+          echo "ℹ️ No ECR images to delete"
+        fi
+      continue-on-error: true
+
     - name: Destroy Infrastructure
       working-directory: terraform/environments/${{ github.event.inputs.environment }}
       run: |
@@ -49,4 +61,4 @@ jobs:
     - name: Summary
       run: |
         echo "✅ Infrastructure destroyed for environment: ${{ github.event.inputs.environment }}"
-        echo "📝 Note: ECR repository and images are shared across environments and remain intact"
+        echo "🗑️ ECR images deleted (will be rebuilt on next deployment)"
