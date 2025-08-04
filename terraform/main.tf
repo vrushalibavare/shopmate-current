@@ -1,5 +1,16 @@
+# ============================================================================
+# SHOPMATE E-COMMERCE TERRAFORM CONFIGURATION
+# ============================================================================
+# This configuration creates a complete AWS infrastructure for the ShopMate
+# e-commerce application using ECS Fargate, DynamoDB, and Application Load Balancer
+
 terraform {
+  required_version = ">= 1.3.0"
   required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.1"
@@ -11,7 +22,106 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ACM Certificate
+# ============================================================================
+# 1. NETWORKING FOUNDATION
+# ============================================================================
+# Using AWS VPC module for standardized and best-practice VPC setup
+
+module "vpc" {
+  source = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
+
+  name = "shopmate-vpc-${var.environment}"
+  cidr = "10.0.0.0/16"
+
+  azs             = ["${var.aws_region}a", "${var.aws_region}b"]
+  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
+  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
+
+  enable_nat_gateway = true
+  single_nat_gateway = true
+  enable_vpn_gateway = false
+
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+# Security Group for Load Balancer
+resource "aws_security_group" "alb" {
+  name        = "shopmate-alb-sg-${var.environment}"
+  description = "Security group for ALB"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Security Group for ECS Tasks
+resource "aws_security_group" "ecs_tasks" {
+  name        = "shopmate-ecs-tasks-sg-${var.environment}"
+  description = "Security group for ECS tasks"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# ============================================================================
+# 2. SSL/TLS CERTIFICATE & DNS MANAGEMENT
+# ============================================================================
+# Manages SSL certificates and DNS records for secure HTTPS access
+
+# Route53 Zone Management - Uses existing or creates new zone
+# Conditional resource creation based on variable
+data "aws_route53_zone" "selected" {
+  count = var.create_route53_zone ? 0 : 1
+  name  = var.route53_zone_name
+}
+
+resource "aws_route53_zone" "primary" {
+  count = var.create_route53_zone ? 1 : 0
+  name  = var.route53_zone_name
+}
+
+# Local value to reference the correct zone ID
+locals {
+  route53_zone_id = var.create_route53_zone ? aws_route53_zone.primary[0].zone_id : data.aws_route53_zone.selected[0].zone_id
+}
+
+# SSL Certificate - Provides HTTPS encryption
 resource "aws_acm_certificate" "shopmate" {
   domain_name       = var.domain_name
   validation_method = "DNS"
@@ -25,32 +135,7 @@ resource "aws_acm_certificate" "shopmate" {
   }
 }
 
-# Certificate Validation
-resource "aws_acm_certificate_validation" "shopmate" {
-  certificate_arn         = aws_acm_certificate.shopmate.arn
-  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
-}
-
-# Route53 Zone (use existing zone if available)
-# uses ternary opearation to decide if zone needs to be created condition ? value_if_true : value_if_false
-# when set to flase the data block witll have count = 1 and will be executed and the resource block count will be
-# set to 0 and not implemented.
-
-data "aws_route53_zone" "selected" {
-  count = var.create_route53_zone ? 0 : 1
-  name  = var.route53_zone_name
-}
-
-resource "aws_route53_zone" "primary" {
-  count = var.create_route53_zone ? 1 : 0
-  name  = var.route53_zone_name
-}
-
-locals {
-  route53_zone_id = var.create_route53_zone ? aws_route53_zone.primary[0].zone_id : data.aws_route53_zone.selected[0].zone_id
-}
-
-# Certificate validation records
+# Certificate validation DNS records
 resource "aws_route53_record" "cert_validation" {
   for_each = {
     for dvo in aws_acm_certificate.shopmate.domain_validation_options : dvo.domain_name => {
@@ -68,7 +153,13 @@ resource "aws_route53_record" "cert_validation" {
   zone_id         = local.route53_zone_id
 }
 
-# DNS record for the application
+# Certificate validation resource
+resource "aws_acm_certificate_validation" "shopmate" {
+  certificate_arn         = aws_acm_certificate.shopmate.arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+# DNS A record pointing to load balancer
 resource "aws_route53_record" "shopmate" {
   zone_id = local.route53_zone_id
   name    = var.domain_name
@@ -81,15 +172,18 @@ resource "aws_route53_record" "shopmate" {
   }
 }
 
-# ECR Repository
+# ============================================================================
+# 3. CONTAINER REGISTRY
+# ============================================================================
+# ECR repository for storing Docker images with lifecycle management
+
+# ECR Repository - Stores Docker images
 resource "aws_ecr_repository" "shopmate" {
   name                 = "shopmate"
   image_tag_mutability = "MUTABLE"
-
-
 }
 
-# ECR Lifecycle Policy
+# ECR Lifecycle Policy - Manages image retention to control costs
 resource "aws_ecr_lifecycle_policy" "shopmate" {
   repository = aws_ecr_repository.shopmate.name
 
@@ -125,35 +219,12 @@ resource "aws_ecr_lifecycle_policy" "shopmate" {
   })
 }
 
-# ECS Cluster
-resource "aws_ecs_cluster" "shopmate" {
-  name = "shopmate-${var.environment}"
-}
+# ============================================================================
+# 4. DATABASE LAYER
+# ============================================================================
+# DynamoDB tables for application data storage with pay-per-request billing
 
-# CloudWatch Log Group
-resource "aws_cloudwatch_log_group" "shopmate" {
-  name              = "/ecs/shopmate-${var.environment}"
-  retention_in_days = 30
-}
-
-# Generate random session secret
-resource "random_password" "session_secret" {
-  length  = 64
-  special = true
-}
-
-# Secrets Manager for session secret
-resource "aws_secretsmanager_secret" "session_secret" {
-  name        = "shopmate-session-secret-${var.environment}"
-  description = "Session secret for ShopMate ${var.environment}"
-}
-
-resource "aws_secretsmanager_secret_version" "session_secret" {
-  secret_id     = aws_secretsmanager_secret.session_secret.id
-  secret_string = random_password.session_secret.result
-}
-
-# DynamoDB Tables
+# Products table - Stores product catalog
 resource "aws_dynamodb_table" "products" {
   name         = "shopmate-products-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
@@ -165,6 +236,7 @@ resource "aws_dynamodb_table" "products" {
   }
 }
 
+# Orders table - Stores customer orders
 resource "aws_dynamodb_table" "orders" {
   name         = "shopmate-orders-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
@@ -172,10 +244,11 @@ resource "aws_dynamodb_table" "orders" {
 
   attribute {
     name = "id"
-    type = "N"
+    type = "S"
   }
 }
 
+# Carts table - Stores shopping cart data
 resource "aws_dynamodb_table" "carts" {
   name         = "shopmate-carts-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
@@ -187,7 +260,37 @@ resource "aws_dynamodb_table" "carts" {
   }
 }
 
-# ECS Task Execution Role
+# ============================================================================
+# 5. SECRETS MANAGEMENT
+# ============================================================================
+# Secure storage and management of application secrets
+
+# Generate secure session secret
+resource "random_password" "session_secret" {
+  length  = 64
+  special = true
+}
+
+# Secrets Manager secret for session management
+resource "aws_secretsmanager_secret" "session_secret" {
+  name                    = "shopmate-session-key-${var.environment}"
+  description             = "Session secret for ShopMate ${var.environment}"
+  force_overwrite_replica_secret = true
+  recovery_window_in_days = 0
+}
+
+# Store the generated secret
+resource "aws_secretsmanager_secret_version" "session_secret" {
+  secret_id     = aws_secretsmanager_secret.session_secret.id
+  secret_string = random_password.session_secret.result
+}
+
+# ============================================================================
+# 6. IAM ROLES & POLICIES
+# ============================================================================
+# Identity and Access Management for ECS tasks and AWS service integration
+
+# ECS Task Execution Role - Allows ECS to pull images and write logs
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "shopmate-execution-role-${var.environment}"
 
@@ -205,17 +308,13 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   })
 }
 
+# Attach AWS managed policy for ECS task execution
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_iam_role_policy_attachment" "execution_role_secrets" {
-  role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = aws_iam_policy.secrets_access.arn
-}
-
-# Task Role for DynamoDB Access
+# ECS Task Role - Allows application to access AWS services
 resource "aws_iam_role" "ecs_task_role" {
   name = "shopmate-task-role-${var.environment}"
 
@@ -233,6 +332,7 @@ resource "aws_iam_role" "ecs_task_role" {
   })
 }
 
+# DynamoDB access policy - Allows CRUD operations on tables
 resource "aws_iam_policy" "dynamodb_access" {
   name        = "shopmate-dynamodb-access-${var.environment}"
   description = "Allow access to DynamoDB tables"
@@ -262,6 +362,7 @@ resource "aws_iam_policy" "dynamodb_access" {
   })
 }
 
+# Secrets Manager access policy - Allows reading secrets
 resource "aws_iam_policy" "secrets_access" {
   name        = "shopmate-secrets-access-${var.environment}"
   description = "Allow access to Secrets Manager"
@@ -280,6 +381,12 @@ resource "aws_iam_policy" "secrets_access" {
   })
 }
 
+# Attach policies to roles
+resource "aws_iam_role_policy_attachment" "execution_role_secrets" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.secrets_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "task_role_dynamodb" {
   role       = aws_iam_role.ecs_task_role.name
   policy_arn = aws_iam_policy.dynamodb_access.arn
@@ -290,103 +397,76 @@ resource "aws_iam_role_policy_attachment" "task_role_secrets" {
   policy_arn = aws_iam_policy.secrets_access.arn
 }
 
-# VPC Configuration
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
+# ============================================================================
+# 7. LOAD BALANCER & TARGET GROUP
+# ============================================================================
+# Application Load Balancer for distributing traffic and SSL termination
 
-  tags = {
-    Name = "shopmate-vpc-${var.environment}"
+# Application Load Balancer - Distributes incoming traffic
+resource "aws_lb" "shopmate" {
+  name               = "shopmate-alb-${var.environment}"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = module.vpc.public_subnets
+}
+
+# Target Group - Defines health check and routing for containers
+resource "aws_lb_target_group" "shopmate" {
+  name        = "shopmate-tg-${var.environment}"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = module.vpc.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/health"
+    healthy_threshold   = 3
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+    matcher             = "200"
   }
 }
 
-resource "aws_subnet" "public_a" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.aws_region}a"
-  map_public_ip_on_launch = true
+# HTTPS Listener - Handles secure traffic
+resource "aws_lb_listener" "shopmate" {
+  load_balancer_arn = aws_lb.shopmate.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  certificate_arn   = aws_acm_certificate_validation.shopmate.certificate_arn
 
-  tags = {
-    Name = "shopmate-public-a-${var.environment}"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.shopmate.arn
   }
 }
 
-resource "aws_subnet" "public_b" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "${var.aws_region}b"
-  map_public_ip_on_launch = true
+# HTTP Listener - Redirects to HTTPS
+resource "aws_lb_listener" "shopmate_http" {
+  load_balancer_arn = aws_lb.shopmate.arn
+  port              = "80"
+  protocol          = "HTTP"
 
-  tags = {
-    Name = "shopmate-public-b-${var.environment}"
+  default_action {
+    type = "redirect"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
   }
 }
 
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
+# ============================================================================
+# 8. CONTAINER ORCHESTRATION
+# ============================================================================
+# Using AWS ECS module for standardized ECS setup
 
-  tags = {
-    Name = "shopmate-igw-${var.environment}"
-  }
-}
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
-  }
-
-  tags = {
-    Name = "shopmate-public-rt-${var.environment}"
-  }
-}
-
-resource "aws_route_table_association" "public_a" {
-  subnet_id      = aws_subnet.public_a.id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "public_b" {
-  subnet_id      = aws_subnet.public_b.id
-  route_table_id = aws_route_table.public.id
-}
-
-# Security Group
-resource "aws_security_group" "shopmate" {
-  name        = "shopmate-sg-${var.environment}"
-  description = "Allow inbound traffic to ShopMate"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+# ECS Cluster
+resource "aws_ecs_cluster" "shopmate" {
+  name = "shopmate-${var.environment}"
 }
 
 # ECS Task Definition
@@ -421,16 +501,6 @@ resource "aws_ecs_task_definition" "shopmate" {
           name  = "PORT"
           value = "3000"
         },
-      ]
-
-      secrets = [
-        {
-          name      = "SESSION_SECRET"
-          valueFrom = aws_secretsmanager_secret.session_secret.arn
-        }
-      ]
-
-      environment = [
         {
           name  = "PRODUCTS_TABLE"
           value = aws_dynamodb_table.products.name
@@ -449,6 +519,13 @@ resource "aws_ecs_task_definition" "shopmate" {
         }
       ]
 
+      secrets = [
+        {
+          name      = "SESSION_SECRET"
+          valueFrom = aws_secretsmanager_secret.session_secret.arn
+        }
+      ]
+
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -461,61 +538,45 @@ resource "aws_ecs_task_definition" "shopmate" {
   ])
 }
 
-# Load Balancer
-resource "aws_lb" "shopmate" {
-  name               = "shopmate-alb-${var.environment}"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.shopmate.id]
-  subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-}
+# ECS Service
+resource "aws_ecs_service" "shopmate" {
+  name            = "shopmate-service-${var.environment}"
+  cluster         = aws_ecs_cluster.shopmate.id
+  task_definition = aws_ecs_task_definition.shopmate.arn
+  desired_count   = var.app_count
+  launch_type     = "FARGATE"
 
-resource "aws_lb_target_group" "shopmate" {
-  name        = "shopmate-tg-${var.environment}"
-  port        = 3000
-  protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
-  target_type = "ip"
-
-  health_check {
-    path                = "/health"
-    healthy_threshold   = 3
-    unhealthy_threshold = 2
-    timeout             = 5
-    interval            = 30
-    matcher             = "200"
+  network_configuration {
+    subnets          = module.vpc.private_subnets
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = false
   }
-}
 
-resource "aws_lb_listener" "shopmate" {
-  load_balancer_arn = aws_lb.shopmate.arn
-  port              = "443"
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
-  certificate_arn   = aws_acm_certificate_validation.shopmate.certificate_arn
-
-  default_action {
-    type             = "forward"
+  load_balancer {
     target_group_arn = aws_lb_target_group.shopmate.arn
+    container_name   = "shopmate"
+    container_port   = 3000
   }
+
+  depends_on = [aws_lb_listener.shopmate]
 }
 
-resource "aws_lb_listener" "shopmate_http" {
-  load_balancer_arn = aws_lb.shopmate.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
+# CloudWatch Log Group
+resource "aws_cloudwatch_log_group" "shopmate" {
+  name              = "/ecs/shopmate-${var.environment}"
+  retention_in_days = 30
 }
 
-# Auto Scaling Target
+
+
+
+
+# ============================================================================
+# 9. AUTO SCALING CONFIGURATION
+# ============================================================================
+# Automatic scaling based on CPU and memory utilization
+
+# Auto Scaling Target - Defines scaling parameters
 resource "aws_appautoscaling_target" "ecs_target" {
   max_capacity       = var.environment == "prod" ? 10 : 5
   min_capacity       = var.app_count
@@ -524,7 +585,7 @@ resource "aws_appautoscaling_target" "ecs_target" {
   service_namespace  = "ecs"
 }
 
-# Auto Scaling Policy - CPU
+# CPU-based scaling policy
 resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
   name               = "shopmate-cpu-scaling-${var.environment}"
   policy_type        = "TargetTrackingScaling"
@@ -540,7 +601,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
   }
 }
 
-# Auto Scaling Policy - Memory
+# Memory-based scaling policy
 resource "aws_appautoscaling_policy" "ecs_memory_policy" {
   name               = "shopmate-memory-scaling-${var.environment}"
   policy_type        = "TargetTrackingScaling"
@@ -556,30 +617,12 @@ resource "aws_appautoscaling_policy" "ecs_memory_policy" {
   }
 }
 
-# ECS Service
-resource "aws_ecs_service" "shopmate" {
-  name            = "shopmate-service-${var.environment}"
-  cluster         = aws_ecs_cluster.shopmate.id
-  task_definition = aws_ecs_task_definition.shopmate.arn
-  desired_count   = var.app_count
-  launch_type     = "FARGATE"
+# ============================================================================
+# 10. MONITORING & OBSERVABILITY
+# ============================================================================
+# CloudWatch dashboard for monitoring application performance and health
 
-  network_configuration {
-    subnets          = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-    security_groups  = [aws_security_group.shopmate.id]
-    assign_public_ip = true
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.shopmate.arn
-    container_name   = "shopmate"
-    container_port   = 3000
-  }
-
-  depends_on = [aws_lb_listener.shopmate]
-}
-
-# CloudWatch Dashboard
+# CloudWatch Dashboard - Provides operational visibility
 resource "aws_cloudwatch_dashboard" "shopmate" {
   dashboard_name = "shopmate-${var.environment}"
 
