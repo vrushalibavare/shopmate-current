@@ -161,6 +161,18 @@ The repository includes several diagnostic scripts to help troubleshoot issues:
 - `check-load-balancer.sh` - Checks load balancer and target health
 - `redeploy.sh` - Rebuilds and redeploys the application
 
+### Development Scripts
+
+- `sync-app-code.sh` - Syncs only the application code to a separate repository
+  ```bash
+  # Sync with default commit message
+  ./sync-app-code.sh
+  
+  # Sync with custom commit message
+  ./sync-app-code.sh "Fix order placement bug"
+  ```
+  This script copies app files (controllers, models, routes, views, etc.) to the `shopmate-app-code` repository, excluding infrastructure and deployment files.
+
 ### Viewing Logs
 
 To view application logs:
