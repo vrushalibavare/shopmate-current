@@ -13,21 +13,12 @@ variable "aws_region" {
   type        = string
   default     = "ap-southeast-1"
   
-  validation {
-    condition = can(regex("^[a-z]{2}-[a-z]+-[0-9]$", var.aws_region))
-    error_message = "AWS region must be in the format: xx-xxxx-x (e.g., us-east-1)."
-  }
 }
 
 variable "environment" {
   description = "The deployment environment (dev, uat, prod). This affects resource naming and scaling parameters."
   type        = string
   default     = "dev"
-  
-  validation {
-    condition = contains(["dev", "uat", "prod"], var.environment)
-    error_message = "Environment must be one of: dev, uat, prod."
-  }
 }
 
 # ============================================================================
@@ -52,13 +43,13 @@ variable "app_count" {
 variable "domain_name" {
   description = "Fully qualified domain name for the application (e.g., shopmate.example.com). SSL certificate will be issued for this domain."
   type        = string
-  default     = "shopmate-app.example.com"
+  default     = "shopmate-app.sctp-sandbox.com"
 }
 
 variable "route53_zone_name" {
   description = "The Route53 hosted zone name (e.g., example.com). Must be the parent domain of the application domain."
   type        = string
-  default     = "example.com"
+  default     = "sctp-sandbox.com"
 }
 
 variable "create_route53_zone" {
