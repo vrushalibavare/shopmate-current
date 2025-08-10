@@ -28,7 +28,7 @@ git pull
 git checkout -b "$TEST_BRANCH"
 
 echo "2. Making test change..."
-echo "// Promotion test $(date)" >> public/js/main.js
+echo "Promotion test $(date)" > test-promotion-$TIMESTAMP.tmp
 git add .
 git commit -m "test: deployment promotion pipeline"
 git push --set-upstream origin "$TEST_BRANCH"
