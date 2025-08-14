@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [ dev ]
     types: [ closed ]
+    paths-ignore:
+      - 'terraform/prometheus.yml'
+      - 'Dockerfile.prometheus'
+      - 'monitoring/**'
 
 env:
   AWS_REGION: ap-southeast-1
@@ -68,6 +72,11 @@ jobs:
 
     - name: Deploy with Terraform
       working-directory: terraform/environments/dev
+      env:
+        # TF_VAR_ prefix is Terraform's standard way to pass environment variables
+        # TF_VAR_image_tag automatically maps to var.image_tag in Terraform
+        # Overrides default "latest" with commit SHA for immutable deployments
+        TF_VAR_image_tag: ${{ github.sha }}
       run: |
         terraform init -reconfigure
         terraform apply -auto-approve
@@ -86,7 +95,11 @@ jobs:
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-    - name: Get deployment URL
+    - name: Get deployment URLs
       working-directory: terraform/environments/dev
       run: |
-        echo "Deployment URL: $(terraform output -raw load_balancer_url)"
+        echo "✅ Deployment completed successfully!"
+        echo "🌐 Application URL: $(terraform output -raw application_url)"
+        echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
+        echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
+        echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"

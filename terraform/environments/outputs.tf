@@ -13,3 +13,11 @@ output "application_url" {
 output "cloudwatch_dashboard_url" {
   value = module.shopmate.cloudwatch_dashboard_url
 }
+
+output "grafana_url" {
+  value = module.shopmate.grafana_url
+}
+
+output "prometheus_url" {
+  value = module.shopmate.prometheus_url
+}

@@ -58,6 +58,12 @@ variable "create_route53_zone" {
   default     = false
 }
 
+variable "image_tag" {
+  description = "Docker image tag to deploy. Use commit SHA for immutable deployments or 'latest' for development."
+  type        = string
+  default     = "latest"
+}
+
 # ============================================================================
 # VARIABLE USAGE NOTES
 # ============================================================================

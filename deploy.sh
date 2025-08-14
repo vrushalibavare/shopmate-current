@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# ShopMate Deployment Script
+# Builds and deploys:
+# - Main application (shopmate:latest + timestamp)
+# - Prometheus monitoring (shopmate:prometheus) if Dockerfile.prometheus exists
+# - Updates all ECS services (main app, Prometheus, Grafana)
+
 # Configuration
 ENVIRONMENT=${1:-dev}
 REGION=${2:-ap-southeast-1}
@@ -38,9 +44,12 @@ fi
 REGISTRY_URL=$(echo $ECR_URL | cut -d'/' -f1)
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REGISTRY_URL
 
-# Build multi-architecture image
-echo "🏗️ Building multi-architecture Docker image..."
+# Build multi-architecture images
+echo "🏗️ Building multi-architecture Docker images..."
 docker buildx create --use --name multiarch-builder 2>/dev/null || docker buildx use multiarch-builder
+
+# Build main application image
+echo "📱 Building main application image..."
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --tag $ECR_URL:latest \
@@ -48,18 +57,63 @@ docker buildx build \
   --push \
   $DOCKERFILE_PATH
 
-# Force ECS service update
-echo "🔄 Updating ECS service..."
+# Build Prometheus image if Dockerfile exists
+if [ -f "Dockerfile.prometheus" ]; then
+  echo "📊 Building Prometheus image..."
+  docker buildx build \
+    --platform linux/amd64 \
+    --file Dockerfile.prometheus \
+    --tag $ECR_URL:prometheus \
+    --push \
+    .
+else
+  echo "⚠️ Dockerfile.prometheus not found, skipping Prometheus build"
+fi
+
+# Force ECS services update
+echo "🔄 Updating ECS services..."
 cd terraform/environments/$ENVIRONMENT
 CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
-SERVICE_NAME="shopmate-service-$ENVIRONMENT"
 
+# Update main application service
+echo "📱 Updating main application service..."
+SERVICE_NAME="shopmate-service-$ENVIRONMENT"
 aws ecs update-service \
   --cluster $CLUSTER_NAME \
   --service $SERVICE_NAME \
   --force-new-deployment \
   --region $REGION
 
+# Update Prometheus service if it exists
+echo "📊 Updating Prometheus service..."
+PROMETHEUS_SERVICE="prometheus-$ENVIRONMENT"
+if aws ecs describe-services --cluster $CLUSTER_NAME --services $PROMETHEUS_SERVICE --region $REGION >/dev/null 2>&1; then
+  aws ecs update-service \
+    --cluster $CLUSTER_NAME \
+    --service $PROMETHEUS_SERVICE \
+    --force-new-deployment \
+    --region $REGION
+  echo "✅ Prometheus service updated"
+else
+  echo "⚠️ Prometheus service not found, skipping update"
+fi
+
+# Update Grafana service if it exists
+echo "📈 Updating Grafana service..."
+GRAFANA_SERVICE="grafana-$ENVIRONMENT"
+if aws ecs describe-services --cluster $CLUSTER_NAME --services $GRAFANA_SERVICE --region $REGION >/dev/null 2>&1; then
+  aws ecs update-service \
+    --cluster $CLUSTER_NAME \
+    --service $GRAFANA_SERVICE \
+    --force-new-deployment \
+    --region $REGION
+  echo "✅ Grafana service updated"
+else
+  echo "⚠️ Grafana service not found, skipping update"
+fi
+
 echo "✅ Deployment completed successfully!"
 echo "🌐 Application URL: $(terraform output -raw application_url)"
-echo "📊 Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
+echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
+echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
+echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"

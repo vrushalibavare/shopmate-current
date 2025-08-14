@@ -84,12 +84,21 @@ jobs:
 
     - name: Deploy with Terraform (reuse dev image)
       working-directory: terraform/environments/uat
+      env:
+        # TF_VAR_ prefix is Terraform's standard way to pass environment variables
+        # TF_VAR_image_tag automatically maps to var.image_tag in Terraform
+        # Uses source commit SHA to promote same tested image from dev
+        TF_VAR_image_tag: ${{ steps.source-commit.outputs.source_sha }}
       run: |
         terraform init -reconfigure
         terraform apply -auto-approve
 
-    - name: Get deployment URL
+    - name: Get deployment URLs
       working-directory: terraform/environments/uat
       run: |
-        echo "Staging URL: $(terraform output -raw load_balancer_url)"
-        echo "Using Docker image: ${{ steps.source-commit.outputs.source_sha }}"
+        echo "✅ Staging deployment completed successfully!"
+        echo "🌐 Application URL: $(terraform output -raw application_url)"
+        echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
+        echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
+        echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"
+        echo "📷 Using Docker image: ${{ steps.source-commit.outputs.source_sha }}"

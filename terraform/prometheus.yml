@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'shopmate'
+    static_configs:
+      - targets: ['shopmate.dev.sctp-sandbox.com']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scheme: https
