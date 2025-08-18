@@ -4,9 +4,9 @@ on:
   push:
     branches: [ dev ]
     paths:
-      - 'terraform/prometheus.yml'
-      - 'Dockerfile.prometheus'
-      - 'monitoring/**'
+      - 'infra/terraform/prometheus.yml'
+      - 'infra/Dockerfile.prometheus'
+      - 'infra/monitoring/**'
 
 env:
   AWS_REGION: ap-southeast-1
@@ -35,7 +35,7 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-        docker buildx build --platform=linux/amd64 -f Dockerfile.prometheus -t $ECR_REGISTRY/$ECR_REPOSITORY:prometheus .
+        docker buildx build --platform=linux/amd64 -f infra/Dockerfile.prometheus -t $ECR_REGISTRY/$ECR_REPOSITORY:prometheus .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:prometheus
 
     - name: Force ECS service update

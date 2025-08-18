@@ -260,6 +260,23 @@ resource "aws_dynamodb_table" "carts" {
   }
 }
 
+# Sessions table - Stores user sessions for stateless architecture
+resource "aws_dynamodb_table" "sessions" {
+  name         = "shopmate-sessions-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires"
+    enabled        = true
+  }
+}
+
 # ============================================================================
 # 5. SECRETS MANAGEMENT
 # ============================================================================
@@ -349,13 +366,15 @@ resource "aws_iam_policy" "dynamodb_access" {
           "dynamodb:BatchWriteItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem"
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable"
         ]
         Effect = "Allow"
         Resource = [
           aws_dynamodb_table.products.arn,
           aws_dynamodb_table.orders.arn,
-          aws_dynamodb_table.carts.arn
+          aws_dynamodb_table.carts.arn,
+          aws_dynamodb_table.sessions.arn
         ]
       }
     ]
@@ -510,8 +529,8 @@ resource "aws_ecs_task_definition" "shopmate" {
   family                   = "shopmate-${var.environment}"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
+  cpu                      = "512"
+  memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
@@ -548,6 +567,10 @@ resource "aws_ecs_task_definition" "shopmate" {
         {
           name  = "CARTS_TABLE"
           value = aws_dynamodb_table.carts.name
+        },
+        {
+          name  = "SESSIONS_TABLE"
+          value = aws_dynamodb_table.sessions.name
         },
         {
           name  = "AWS_REGION"

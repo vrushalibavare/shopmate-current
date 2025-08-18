@@ -2,6 +2,14 @@ const Product = require('../models/product');
 const { get, put, scan, deleteItem, ORDERS_TABLE, CARTS_TABLE } = require('../utils/dynamodb');
 const uuid = require('uuid');
 
+// Import metrics (with fallback if not available)
+let metrics;
+try {
+  metrics = require('../app').metrics;
+} catch (error) {
+  metrics = null;
+}
+
 // Helper function to get user ID
 const getUserId = (req) => {
   if (!req.session.userId) {
@@ -114,6 +122,16 @@ exports.placeOrder = async (req, res) => {
   // Save order to DynamoDB
   try {
     await put(ORDERS_TABLE, order);
+    
+    // Track order creation and value
+    if (metrics) {
+      if (metrics.ordersCreated) {
+        metrics.ordersCreated.inc();
+      }
+      if (metrics.orderValue) {
+        metrics.orderValue.inc(total);
+      }
+    }
     
     // Clear cart
     await saveCartToDB(userId, []);

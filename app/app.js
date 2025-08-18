@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
+const promClient = require('prom-client');
 
 // Enhanced rate limiting middleware with resource protection
 const rateLimit = (windowMs, max) => {
@@ -58,6 +59,70 @@ const rateLimit = (windowMs, max) => {
 };
 const path = require('path');
 
+// ============================================================================
+// PROMETHEUS METRICS SETUP
+// ============================================================================
+// Enable default Node.js metrics (memory, CPU, etc.)
+promClient.collectDefaultMetrics({
+  prefix: 'nodejs_',
+  timeout: 5000
+});
+
+// HTTP request metrics
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status_code']
+});
+
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'HTTP request duration in seconds',
+  labelNames: ['method', 'route']
+});
+
+// Business metrics
+const ordersCreated = new promClient.Counter({
+  name: 'orders_created_total',
+  help: 'Total orders created'
+});
+
+const cartItemsAdded = new promClient.Counter({
+  name: 'cart_items_added_total',
+  help: 'Total items added to cart'
+});
+
+const productViews = new promClient.Counter({
+  name: 'product_views_total',
+  help: 'Total product views'
+});
+
+const orderValue = new promClient.Counter({
+  name: 'order_value_total',
+  help: 'Total order value in currency'
+});
+
+// Custom Node.js metrics
+const activeHandles = new promClient.Gauge({
+  name: 'nodejs_active_handles_total',
+  help: 'Number of active handles'
+});
+
+const eventLoopLag = new promClient.Gauge({
+  name: 'nodejs_eventloop_lag_seconds',
+  help: 'Event loop lag in seconds'
+});
+
+// Export metrics for use in other modules
+module.exports.metrics = {
+  httpRequestsTotal,
+  httpRequestDuration,
+  ordersCreated,
+  cartItemsAdded,
+  productViews,
+  orderValue
+};
+
 // Import routes
 const productRoutes = require('./routes/products');
 const cartRoutes = require('./routes/cart');
@@ -87,26 +152,56 @@ app.use((req, res, next) => {
   next();
 });
 
-// Configure session with secure cookies and resource limits
+// Configure DynamoDB session store for stateless architecture
+const DynamoDBStore = require('connect-dynamodb')(session);
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'shopmate-default-secret',
   resave: false,
-  saveUninitialized: false, // Don't create sessions for unauthenticated users
+  saveUninitialized: false,
   cookie: { 
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   },
-  // Memory store limits (use Redis in production)
-  store: undefined, // Default memory store with built-in limits
-  rolling: true, // Reset expiration on activity
-  name: 'shopmate.sid' // Custom session name
+  store: new DynamoDBStore({
+    table: process.env.SESSIONS_TABLE || 'shopmate-sessions-dev',
+    AWSConfigJSON: {
+      region: process.env.AWS_REGION || 'ap-southeast-1'
+    },
+    reapInterval: 86400000 // Clean up expired sessions daily
+  }),
+  rolling: true,
+  name: 'shopmate.sid'
 }));
 
 // Set view engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+
+// Prometheus metrics middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route?.path || req.path;
+    
+    httpRequestsTotal.inc({ 
+      method: req.method, 
+      route: route,
+      status_code: res.statusCode 
+    });
+    
+    httpRequestDuration.observe({ 
+      method: req.method, 
+      route: route 
+    }, duration);
+  });
+  
+  next();
+});
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -165,53 +260,61 @@ app.get('/health', (req, res) => {
 });
 
 // Metrics endpoint for Prometheus
-app.get('/metrics', (req, res) => {
-  const memUsage = process.memoryUsage();
-  const uptime = process.uptime();
-  
-  const metrics = `
-# HELP nodejs_memory_usage_bytes Memory usage in bytes
-# TYPE nodejs_memory_usage_bytes gauge
-nodejs_memory_usage_rss_bytes ${memUsage.rss}
-nodejs_memory_usage_heap_total_bytes ${memUsage.heapTotal}
-nodejs_memory_usage_heap_used_bytes ${memUsage.heapUsed}
-
-# HELP nodejs_uptime_seconds Process uptime in seconds
-# TYPE nodejs_uptime_seconds counter
-nodejs_uptime_seconds ${uptime}
-
-# HELP http_requests_total Total HTTP requests
-# TYPE http_requests_total counter
-http_requests_total{method="GET"} ${Math.floor(Math.random() * 1000)}
-http_requests_total{method="POST"} ${Math.floor(Math.random() * 100)}
-`;
-  
-  res.set('Content-Type', 'text/plain');
-  res.send(metrics.trim());
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', promClient.register.contentType);
+    const metrics = await promClient.register.metrics();
+    res.send(metrics);
+  } catch (error) {
+    console.error('Error generating metrics:', error);
+    res.status(500).send('Error generating metrics');
+  }
 });
 
-// CPU stress test endpoint for autoscaling testing (rate limited with timeout protection)
-const stressRateLimit = rateLimit(60 * 1000, 50); // 50 requests per minute
+// Balanced CPU stress test endpoint for safe autoscaling testing
+const stressRateLimit = rateLimit(60 * 1000, 200); // 200 requests per minute
 app.get('/stress', stressRateLimit, (req, res) => {
   const start = Date.now();
-  const maxDuration = 5000; // Maximum 5 seconds
+  const duration = parseInt(req.query.duration) || 20000; // Default 20 seconds
+  const maxDuration = Math.min(duration, 30000); // Maximum 30 seconds
   
-  // CPU-intensive calculation with timeout protection
-  while (Date.now() - start < maxDuration) {
-    // Prevent infinite loops by checking time periodically
-    if ((Date.now() - start) % 100 === 0) {
-      // Small break every 100ms to prevent complete CPU lockup
-      setImmediate(() => {});
+  let result = 0;
+  let cycles = 0;
+  
+  const performBalancedWork = () => {
+    const cycleStart = Date.now();
+    
+    // Work for 150ms intensively
+    while (Date.now() - cycleStart < 150) {
+      for (let i = 0; i < 75000; i++) {
+        result += Math.sqrt(Math.random() * 1000);
+        result += Math.sin(i * 0.01) * Math.cos(i * 0.01);
+        result += Math.pow(Math.random() * 50, 2);
+        result = result % 1000000;
+      }
     }
-    Math.random() * Math.random();
-  }
+    
+    cycles++;
+    
+    // Continue if time remaining
+    if (Date.now() - start < maxDuration) {
+      // 20ms break to allow other requests and health checks
+      setTimeout(performBalancedWork, 20);
+    } else {
+      // Send response
+      const actualDuration = Date.now() - start;
+      res.json({ 
+        message: 'Balanced CPU stress completed', 
+        duration: actualDuration,
+        cycles,
+        result: Math.floor(result),
+        avgCycleTime: Math.round(actualDuration / cycles)
+      });
+    }
+  };
   
-  const duration = Date.now() - start;
-  res.json({ 
-    message: 'CPU stress test completed', 
-    duration,
-    limited: duration >= maxDuration
-  });
+  // Start balanced work
+  performBalancedWork();
 });
 
 // Home route
@@ -223,7 +326,26 @@ app.get('/', (req, res) => {
   });
 });
 
+// Update custom metrics periodically
+setInterval(() => {
+  // Update active handles count
+  try {
+    activeHandles.set(process._getActiveHandles().length);
+  } catch (error) {
+    // Fallback if _getActiveHandles is not available
+    activeHandles.set(0);
+  }
+  
+  // Measure event loop lag
+  const start = process.hrtime.bigint();
+  setImmediate(() => {
+    const lag = Number(process.hrtime.bigint() - start) / 1e9;
+    eventLoopLag.set(lag);
+  });
+}, 5000);
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} in ${ENV} environment`);
+  console.log(`Prometheus metrics available at http://localhost:${PORT}/metrics`);
 });

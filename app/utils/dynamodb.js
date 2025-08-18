@@ -42,10 +42,11 @@ const query = async (params) => {
   return response.Items || [];
 };
 
-const get = async (tableName, key) => {
+const get = async (tableName, key, consistentRead = false) => {
   const command = new GetCommand({
     TableName: tableName,
-    Key: key
+    Key: key,
+    ConsistentRead: consistentRead
   });
   const response = await dynamoDB.send(command);
   return response.Item;

@@ -1,2 +1,2 @@
 FROM prom/prometheus:latest
-COPY terraform/prometheus.yml /etc/prometheus/prometheus.yml
+COPY infra/terraform/prometheus.yml /etc/prometheus/prometheus.yml

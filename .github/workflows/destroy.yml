@@ -41,7 +41,7 @@ jobs:
         terraform_version: 1.5.0
 
     - name: Destroy Infrastructure (skip ECR if it fails)
-      working-directory: terraform/environments/${{ github.event.inputs.environment }}
+      working-directory: infra/terraform/environments/${{ github.event.inputs.environment }}
       continue-on-error: true
       run: |
         terraform init -reconfigure

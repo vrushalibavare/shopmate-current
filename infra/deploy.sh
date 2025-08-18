@@ -15,25 +15,20 @@ IMAGE_NAME="shopmate"
 
 echo "🚀 Starting deployment for environment: $ENVIRONMENT in region: $REGION"
 
-# Navigate to environment directory
-cd terraform/environments/$ENVIRONMENT
+# Set terraform directory
+TERRAFORM_DIR="terraform/environments/$ENVIRONMENT"
 
 # Clean start - remove lock files and .terraform directory
 echo "🧹 Cleaning Terraform state for fresh start..."
-rm -rf .terraform .terraform.lock.hcl
+rm -rf $TERRAFORM_DIR/.terraform $TERRAFORM_DIR/.terraform.lock.hcl
 
 # Deploy infrastructure
 echo "📦 Deploying Terraform infrastructure..."
-terraform init
-terraform plan
-terraform apply -auto-approve
+(cd $TERRAFORM_DIR && terraform init && terraform plan && terraform apply -auto-approve)
 
 # Get ECR repository URL
-ECR_URL=$(terraform output -raw ecr_repository_url)
+ECR_URL=$(cd $TERRAFORM_DIR && terraform output -raw ecr_repository_url)
 echo "📋 ECR Repository: $ECR_URL"
-
-# Navigate back to project root
-cd ../../..
 
 # Login to ECR
 echo "🔐 Logging into ECR..."
@@ -55,7 +50,7 @@ docker buildx build \
   --tag $ECR_URL:latest \
   --tag $ECR_URL:$(date +%Y%m%d-%H%M%S) \
   --push \
-  $DOCKERFILE_PATH
+  ../app/
 
 # Build Prometheus image if Dockerfile exists
 if [ -f "Dockerfile.prometheus" ]; then
@@ -65,15 +60,14 @@ if [ -f "Dockerfile.prometheus" ]; then
     --file Dockerfile.prometheus \
     --tag $ECR_URL:prometheus \
     --push \
-    .
+    ..
 else
   echo "⚠️ Dockerfile.prometheus not found, skipping Prometheus build"
 fi
 
 # Force ECS services update
 echo "🔄 Updating ECS services..."
-cd terraform/environments/$ENVIRONMENT
-CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
+CLUSTER_NAME=$(cd $TERRAFORM_DIR && terraform output -raw ecs_cluster_name)
 
 # Update main application service
 echo "📱 Updating main application service..."
@@ -113,7 +107,7 @@ else
 fi
 
 echo "✅ Deployment completed successfully!"
-echo "🌐 Application URL: $(terraform output -raw application_url)"
-echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
-echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
-echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"
+echo "🌐 Application URL: $(cd $TERRAFORM_DIR && terraform output -raw application_url)"
+echo "📊 CloudWatch Dashboard: $(cd $TERRAFORM_DIR && terraform output -raw cloudwatch_dashboard_url)"
+echo "📈 Grafana Dashboard: $(cd $TERRAFORM_DIR && terraform output -raw grafana_url)"
+echo "🔍 Prometheus Metrics: $(cd $TERRAFORM_DIR && terraform output -raw prometheus_url)"

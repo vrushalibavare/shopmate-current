@@ -5,9 +5,9 @@ on:
     branches: [ dev ]
     types: [ closed ]
     paths-ignore:
-      - 'terraform/prometheus.yml'
-      - 'Dockerfile.prometheus'
-      - 'monitoring/**'
+      - 'infra/terraform/prometheus.yml'
+      - 'infra/Dockerfile.prometheus'
+      - 'infra/monitoring/**'
 
 env:
   AWS_REGION: ap-southeast-1
@@ -35,19 +35,19 @@ jobs:
         terraform_version: 1.5.0
 
     - name: Terraform Format Check
-      working-directory: terraform/environments/dev
+      working-directory: infra/terraform/environments/dev
       run: terraform fmt -check
 
     - name: Terraform Init
-      working-directory: terraform/environments/dev
+      working-directory: infra/terraform/environments/dev
       run: terraform init -reconfigure
 
     - name: Terraform Validate
-      working-directory: terraform/environments/dev
+      working-directory: infra/terraform/environments/dev
       run: terraform validate
 
     - name: Terraform Plan
-      working-directory: terraform/environments/dev
+      working-directory: infra/terraform/environments/dev
       run: terraform plan
 
   deploy:
@@ -71,7 +71,7 @@ jobs:
         terraform_version: 1.5.0
 
     - name: Deploy with Terraform
-      working-directory: terraform/environments/dev
+      working-directory: infra/terraform/environments/dev
       env:
         # TF_VAR_ prefix is Terraform's standard way to pass environment variables
         # TF_VAR_image_tag automatically maps to var.image_tag in Terraform
@@ -90,13 +90,13 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        docker buildx build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker buildx build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG app/
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
     - name: Get deployment URLs
-      working-directory: terraform/environments/dev
+      working-directory: infra/terraform/environments/dev
       run: |
         echo "✅ Deployment completed successfully!"
         echo "🌐 Application URL: $(terraform output -raw application_url)"
