@@ -102,6 +102,25 @@ const orderValue = new promClient.Counter({
   help: 'Total order value in currency'
 });
 
+// Product-specific metrics
+const productOrdersCounter = new promClient.Counter({
+  name: 'product_orders_total',
+  help: 'Total products ordered by type',
+  labelNames: ['product_id', 'product_name', 'category']
+});
+
+const productViewsCounter = new promClient.Counter({
+  name: 'product_views_by_type_total',
+  help: 'Total product views by type',
+  labelNames: ['product_id', 'product_name', 'category']
+});
+
+const cartItemsByProduct = new promClient.Counter({
+  name: 'cart_items_by_product_total',
+  help: 'Total cart items by product type',
+  labelNames: ['product_id', 'product_name', 'category']
+});
+
 // Custom Node.js metrics
 const activeHandles = new promClient.Gauge({
   name: 'nodejs_active_handles_total',
@@ -120,7 +139,10 @@ module.exports.metrics = {
   ordersCreated,
   cartItemsAdded,
   productViews,
-  orderValue
+  orderValue,
+  productOrdersCounter,
+  productViewsCounter,
+  cartItemsByProduct
 };
 
 // Import routes

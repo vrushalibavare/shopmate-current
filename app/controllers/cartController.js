@@ -142,6 +142,16 @@ exports.addToCart = async (req, res) => {
       metrics.cartItemsAdded.inc();
     }
     
+    // Track cart items by product type
+    if (metrics && metrics.cartItemsByProduct) {
+      const category = product.category || 'electronics';
+      metrics.cartItemsByProduct.inc({
+        product_id: productId.toString(),
+        product_name: product.name,
+        category: category
+      });
+    }
+    
     // Save updated cart
     await saveCartToDB(userId, cartItems);
     
