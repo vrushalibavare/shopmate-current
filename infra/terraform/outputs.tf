@@ -32,3 +32,13 @@ output "prometheus_url" {
   description = "Prometheus metrics URL"
   value       = "https://${var.domain_name}/prometheus"
 }
+
+output "alb_dns_name" {
+  description = "Application Load Balancer DNS name"
+  value       = aws_lb.shopmate.dns_name
+}
+
+output "alb_url" {
+  description = "Application Load Balancer URL"
+  value       = "https://${aws_lb.shopmate.dns_name}"
+}
