@@ -293,6 +293,8 @@ app.get('/metrics', async (req, res) => {
   }
 });
 
+
+
 // Balanced CPU stress test endpoint for safe autoscaling testing
 const stressRateLimit = rateLimit(60 * 1000, 200); // 200 requests per minute
 app.get('/stress', stressRateLimit, (req, res) => {

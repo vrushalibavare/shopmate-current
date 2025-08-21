@@ -400,6 +400,27 @@ resource "aws_iam_policy" "secrets_access" {
   })
 }
 
+# CloudWatch read access policy - Allows Grafana to read metrics
+resource "aws_iam_policy" "cloudwatch_read" {
+  name        = "shopmate-cloudwatch-read-${var.environment}"
+  description = "Allow read access to CloudWatch metrics"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:ListMetrics",
+          "cloudwatch:GetMetricData"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Attach policies to roles
 resource "aws_iam_role_policy_attachment" "execution_role_secrets" {
   role       = aws_iam_role.ecs_task_execution_role.name
@@ -414,6 +435,11 @@ resource "aws_iam_role_policy_attachment" "task_role_dynamodb" {
 resource "aws_iam_role_policy_attachment" "task_role_secrets" {
   role       = aws_iam_role.ecs_task_role.name
   policy_arn = aws_iam_policy.secrets_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "task_role_cloudwatch" {
+  role       = aws_iam_role.ecs_task_role.name
+  policy_arn = aws_iam_policy.cloudwatch_read.arn
 }
 
 # ============================================================================
@@ -757,6 +783,7 @@ resource "aws_ecs_task_definition" "grafana" {
   cpu                      = "256"
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   container_definitions = jsonencode([
     {
