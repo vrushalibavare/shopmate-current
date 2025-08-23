@@ -400,10 +400,10 @@ resource "aws_iam_policy" "secrets_access" {
   })
 }
 
-# CloudWatch read access policy - Allows Grafana to read metrics
+# CloudWatch read access policy - Allows Grafana to read metrics and logs
 resource "aws_iam_policy" "cloudwatch_read" {
   name        = "shopmate-cloudwatch-read-${var.environment}"
-  description = "Allow read access to CloudWatch metrics"
+  description = "Allow read access to CloudWatch metrics and logs"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -412,7 +412,13 @@ resource "aws_iam_policy" "cloudwatch_read" {
         Action = [
           "cloudwatch:GetMetricStatistics",
           "cloudwatch:ListMetrics",
-          "cloudwatch:GetMetricData"
+          "cloudwatch:GetMetricData",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:GetLogEvents",
+          "logs:StartQuery",
+          "logs:StopQuery",
+          "logs:GetQueryResults"
         ]
         Effect   = "Allow"
         Resource = "*"
@@ -908,7 +914,7 @@ resource "aws_appautoscaling_target" "ecs_target" {
   service_namespace  = "ecs"
 }
 
-# CPU-based scaling policy
+# CPU-based scaling policy with faster response times
 resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
   name               = "shopmate-cpu-scaling-${var.environment}"
   policy_type        = "TargetTrackingScaling"
@@ -920,11 +926,13 @@ resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
-    target_value = 70.0
+    target_value       = 70.0
+    scale_out_cooldown = 60   # Scale out faster (default: 300s)
+    scale_in_cooldown  = 180  # Scale in faster (default: 900s)
   }
 }
 
-# Memory-based scaling policy
+# Memory-based scaling policy with faster response times
 resource "aws_appautoscaling_policy" "ecs_memory_policy" {
   name               = "shopmate-memory-scaling-${var.environment}"
   policy_type        = "TargetTrackingScaling"
@@ -936,7 +944,9 @@ resource "aws_appautoscaling_policy" "ecs_memory_policy" {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageMemoryUtilization"
     }
-    target_value = 80.0
+    target_value       = 80.0
+    scale_out_cooldown = 60   # Scale out faster (default: 300s)
+    scale_in_cooldown  = 180  # Scale in faster (default: 900s)
   }
 }
 

@@ -254,7 +254,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "cevtyu88ul62ob"
+        "uid": "eevn5i5677474d"
       },
       "fieldConfig": {
         "defaults": {
@@ -335,7 +335,7 @@
       "targets": [
         {
           "editorMode": "builder",
-          "expr": "rate(http_requests_total{route=\"/stress\"}[1m])",
+          "expr": "http_requests_total{route=\"/stress\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -347,7 +347,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "cevtyu88ul62ob"
+        "uid": "eevn5i5677474d"
       },
       "fieldConfig": {
         "defaults": {
@@ -431,7 +431,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(nodejs_process_cpu_seconds_total[1m]) * 100",
+          "expr": "rate(nodejs_process_cpu_seconds_total[30s]) * 100\n",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
