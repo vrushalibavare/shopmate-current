@@ -2,12 +2,14 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Copy package files and install dependencies
 COPY package*.json ./
+RUN npm ci && npm cache clean --force
 
-RUN npm install
-
+# Copy application code
 COPY . .
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+# Use node directly for better signal handling
+CMD ["node", "app.js"]

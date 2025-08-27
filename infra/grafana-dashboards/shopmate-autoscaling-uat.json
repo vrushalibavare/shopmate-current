@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "cloudwatch",
-        "uid": "eew5ojtt8xam8d"
+        "uid": "cew6e56jd8zr4c"
       },
       "fieldConfig": {
         "defaults": {
@@ -109,11 +109,11 @@
         {
           "datasource": {
             "type": "cloudwatch",
-            "uid": "eew5ojtt8xam8d"
+            "uid": "cew6e56jd8zr4c"
           },
           "dimensions": {
-            "ClusterName": "shopmate-ecs-dev",
-            "ServiceName": "shopmate-service-dev"
+            "ClusterName": "shopmate-ecs-uat",
+            "ServiceName": "shopmate-service-uat"
           },
           "expression": "",
           "id": "",
@@ -133,13 +133,13 @@
           "statistic": "Average"
         }
       ],
-      "title": "Memory Usage % (512MB allocated)",
+      "title": "ECS Service Memory",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "cloudwatch",
-        "uid": "eew5ojtt8xam8d"
+        "uid": "cew6e56jd8zr4c"
       },
       "fieldConfig": {
         "defaults": {
@@ -224,11 +224,11 @@
         {
           "datasource": {
             "type": "cloudwatch",
-            "uid": "eew5ojtt8xam8d"
+            "uid": "cew6e56jd8zr4c"
           },
           "dimensions": {
-            "ClusterName": "shopmate-ecs-dev",
-            "ServiceName": "shopmate-service-dev"
+            "ClusterName": "shopmate-ecs-uat",
+            "ServiceName": "shopmate-service-uat"
           },
           "expression": "",
           "id": "",
@@ -248,13 +248,13 @@
           "statistic": "Average"
         }
       ],
-      "title": "CPU Usage % (256 CPU units allocated)",
+      "title": "ECS Service CPU",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dew5ohkvbdhc0c"
+        "uid": "eew6e24y8m7lsb"
       },
       "fieldConfig": {
         "defaults": {
@@ -347,7 +347,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "dew5ohkvbdhc0c"
+        "uid": "eew6e24y8m7lsb"
       },
       "fieldConfig": {
         "defaults": {
@@ -437,13 +437,13 @@
           "refId": "A"
         }
       ],
-      "title": "App Memory Usage (MB)",
+      "title": "Memory Usage (MB)",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "cloudwatch",
-        "uid": "eew5ojtt8xam8d"
+        "uid": "cew6e56jd8zr4c"
       },
       "fieldConfig": {
         "defaults": {
@@ -525,11 +525,11 @@
         {
           "datasource": {
             "type": "cloudwatch",
-            "uid": "eew5ojtt8xam8d"
+            "uid": "cew6e56jd8zr4c"
           },
           "dimensions": {
-            "ClusterName": "shopmate-ecs-dev",
-            "ServiceName": "shopmate-service-dev"
+            "ClusterName": "shopmate-ecs-uat",
+            "ServiceName": "shopmate-service-uat"
           },
           "expression": "",
           "id": "",

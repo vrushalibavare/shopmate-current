@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "cloudwatch",
-        "uid": "aevtysde4f4e8a"
+        "uid": "aew9ziduvwyyoa"
       },
       "fieldConfig": {
         "defaults": {
@@ -109,10 +109,10 @@
         {
           "datasource": {
             "type": "cloudwatch",
-            "uid": "aevtysde4f4e8a"
+            "uid": "aew9ziduvwyyoa"
           },
           "dimensions": {
-            "ClusterName": "shopmate-dev",
+            "ClusterName": "shopmate-ecs-dev",
             "ServiceName": "shopmate-service-dev"
           },
           "expression": "",
@@ -128,18 +128,18 @@
           "queryLanguage": "CWLI",
           "queryMode": "Metrics",
           "refId": "A",
-          "region": "default",
+          "region": "ap-southeast-1",
           "sqlExpression": "",
           "statistic": "Average"
         }
       ],
-      "title": "ECS Service Memory",
+      "title": "Memory Usage % (512MB allocated)",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "cloudwatch",
-        "uid": "aevtysde4f4e8a"
+        "uid": "aew9ziduvwyyoa"
       },
       "fieldConfig": {
         "defaults": {
@@ -224,10 +224,10 @@
         {
           "datasource": {
             "type": "cloudwatch",
-            "uid": "aevtysde4f4e8a"
+            "uid": "aew9ziduvwyyoa"
           },
           "dimensions": {
-            "ClusterName": "shopmate-dev",
+            "ClusterName": "shopmate-ecs-dev",
             "ServiceName": "shopmate-service-dev"
           },
           "expression": "",
@@ -243,18 +243,18 @@
           "queryLanguage": "CWLI",
           "queryMode": "Metrics",
           "refId": "A",
-          "region": "default",
+          "region": "ap-southeast-1",
           "sqlExpression": "",
           "statistic": "Average"
         }
       ],
-      "title": "ECS Service CPU",
+      "title": "CPU Usage % (256 CPU units allocated)",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "eevn5i5677474d"
+        "uid": "eew9zfrqz4rnkc"
       },
       "fieldConfig": {
         "defaults": {
@@ -335,7 +335,7 @@
       "targets": [
         {
           "editorMode": "builder",
-          "expr": "http_requests_total{route=\"/stress\"}",
+          "expr": "rate(http_requests_total{route=\"/stress\"}[1m])",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -347,7 +347,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "eevn5i5677474d"
+        "uid": "eew9zfrqz4rnkc"
       },
       "fieldConfig": {
         "defaults": {
@@ -399,11 +399,11 @@
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 400
               }
             ]
           },
-          "unit": "percent"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -431,19 +431,19 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(nodejs_process_cpu_seconds_total[30s]) * 100\n",
-          "legendFormat": "__auto",
+          "expr": "nodejs_process_resident_memory_bytes / 1024 / 1024",
+          "legendFormat": "Memory Usage",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Individual Container CPU%",
+      "title": "App Memory Usage (MB)",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "cloudwatch",
-        "uid": "aevtysde4f4e8a"
+        "uid": "aew9ziduvwyyoa"
       },
       "fieldConfig": {
         "defaults": {
@@ -525,10 +525,10 @@
         {
           "datasource": {
             "type": "cloudwatch",
-            "uid": "aevtysde4f4e8a"
+            "uid": "aew9ziduvwyyoa"
           },
           "dimensions": {
-            "ClusterName": "shopmate-dev",
+            "ClusterName": "shopmate-ecs-dev",
             "ServiceName": "shopmate-service-dev"
           },
           "expression": "",
@@ -544,7 +544,7 @@
           "queryLanguage": "CWLI",
           "queryMode": "Metrics",
           "refId": "A",
-          "region": "default",
+          "region": "ap-southeast-1",
           "sqlExpression": "",
           "statistic": "SampleCount"
         }

@@ -12,38 +12,32 @@ variable "aws_region" {
   description = "The AWS region where all resources will be deployed"
   type        = string
   default     = "ap-southeast-1"
-  
+
 }
 
 variable "environment" {
-  description = "The deployment environment (dev, uat, prod). This affects resource naming and scaling parameters."
+  description = "The deployment environment (dev, uat, prod). This affects resource naming and scaling parameters. Must be explicitly specified."
   type        = string
-  default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "uat", "prod"], var.environment)
+    error_message = "Environment must be one of: dev, uat, prod."
+  }
 }
 
 # ============================================================================
 # APPLICATION SCALING VARIABLES
 # ============================================================================
 
-variable "app_count" {
-  description = "Initial number of ECS tasks (containers) to run. This serves as the minimum capacity for auto-scaling."
-  type        = number
-  default     = 1
-  
-  validation {
-    condition = var.app_count >= 1 && var.app_count <= 10
-    error_message = "App count must be between 1 and 10."
-  }
-}
+
 
 # ============================================================================
 # DNS AND SSL CERTIFICATE VARIABLES
 # ============================================================================
 
 variable "domain_name" {
-  description = "Fully qualified domain name for the application (e.g., shopmate.example.com). SSL certificate will be issued for this domain."
+  description = "Fully qualified domain name for the application (e.g., shopmate.example.com). SSL certificate will be issued for this domain. Must be specified per environment."
   type        = string
-  default     = "shopmate-app.sctp-sandbox.com"
 }
 
 variable "route53_zone_name" {
@@ -59,9 +53,28 @@ variable "create_route53_zone" {
 }
 
 variable "image_tag" {
-  description = "Docker image tag to deploy. Use commit SHA for immutable deployments or 'latest' for development."
+  description = "Docker image tag to deploy. Use commit SHA for immutable deployments or environment-specific tags."
   type        = string
-  default     = "latest"
+}
+
+variable "app_count_min" {
+  description = "Minimum number of ECS tasks for auto-scaling"
+  type        = number
+}
+
+variable "app_count_max" {
+  description = "Maximum number of ECS tasks for auto-scaling"
+  type        = number
+}
+
+variable "task_cpu" {
+  description = "CPU units for ECS task (256, 512, 1024, etc.)"
+  type        = string
+}
+
+variable "task_memory" {
+  description = "Memory for ECS task in MB (512, 1024, 2048, etc.)"
+  type        = string
 }
 
 # ============================================================================
@@ -69,9 +82,9 @@ variable "image_tag" {
 # ============================================================================
 # 
 # Environment-specific recommendations:
-# - dev: app_count = 1, minimal resources for development
-# - uat: app_count = 2, moderate resources for testing
-# - prod: app_count = 3+, production-ready with auto-scaling up to 10 instances
+# - dev: app_count_min = 1, minimal resources for development
+# - uat: app_count_min = 2, moderate resources for testing
+# - prod: app_count_min = 3+, production-ready with auto-scaling up to 10 instances
 #
 # DNS Configuration:
 # - If you own 'example.com' and want 'shopmate.example.com':

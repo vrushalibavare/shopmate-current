@@ -7,10 +7,11 @@ REGION=${2:-ap-southeast-1}
 
 echo "🗑️ Starting destruction for environment: $ENVIRONMENT in region: $REGION"
 
-# Navigate to environment directory
-cd terraform/environments/$ENVIRONMENT
+# Navigate to terraform directory
+cd infra/terraform
 
-# Get resource info before destroying
+# Select workspace and get resource info before destroying
+terraform workspace select $ENVIRONMENT 2>/dev/null || { echo "Workspace $ENVIRONMENT not found"; exit 1; }
 ECR_URL=$(terraform output -raw ecr_repository_url 2>/dev/null || echo "")
 REPO_NAME=$(echo $ECR_URL | cut -d'/' -f2 2>/dev/null || echo "shopmate")
 CLUSTER_NAME=$(terraform output -raw ecs_cluster_name 2>/dev/null || echo "")
@@ -34,24 +35,20 @@ if [ ! -z "$CLUSTER_NAME" ]; then
   sleep 30  # Additional wait for task cleanup
 fi
 
-# Clean ECR images
+# Clean ECR images (only environment-specific ones, preserve prod-latest for promotion)
 if [ ! -z "$ECR_URL" ]; then
-  echo "🧹 Cleaning ECR images..."
+  echo "🧹 Cleaning environment-specific ECR images..."
   
-  # Get all image tags
-  IMAGE_TAGS=$(aws ecr list-images --repository-name $REPO_NAME --region $REGION --query 'imageIds[].imageTag' --output text 2>/dev/null || echo "")
+  # Only delete environment-specific images, preserve prod-latest for UAT/PROD
+  ENV_TAG="$ENVIRONMENT-latest"
   
-  if [ ! -z "$IMAGE_TAGS" ]; then
-    echo "Deleting images with tags: $IMAGE_TAGS"
-    for tag in $IMAGE_TAGS; do
-      aws ecr batch-delete-image \
-        --repository-name $REPO_NAME \
-        --image-ids imageTag=$tag \
-        --region $REGION 2>/dev/null || true
-    done
-  fi
+  echo "Deleting $ENV_TAG image (preserving prod-latest for promotion)..."
+  aws ecr batch-delete-image \
+    --repository-name $REPO_NAME \
+    --image-ids imageTag=$ENV_TAG \
+    --region $REGION 2>/dev/null || true
   
-  # Delete untagged images
+  # Delete untagged images only
   UNTAGGED_IMAGES=$(aws ecr list-images --repository-name $REPO_NAME --region $REGION --filter tagStatus=UNTAGGED --query 'imageIds[].imageDigest' --output text 2>/dev/null || echo "")
   
   if [ ! -z "$UNTAGGED_IMAGES" ]; then
@@ -64,13 +61,16 @@ if [ ! -z "$ECR_URL" ]; then
     done
   fi
   
-  echo "✅ ECR images cleaned"
+  echo "✅ Environment-specific images cleaned (prod-latest preserved)"
 else
   echo "⚠️ ECR repository URL not found, skipping image cleanup"
 fi
 
-# Destroy infrastructure
-echo "💥 Destroying Terraform infrastructure..."
-terraform destroy -auto-approve
+# Destroy infrastructure (preserve OIDC role for future deployments)
+echo "💥 Destroying Terraform infrastructure (preserving OIDC role)..."
+terraform destroy -var-file="terraform.tfvars.$ENVIRONMENT" -auto-approve
+
+echo "⚠️  OIDC role preserved for future deployments"
+echo "To destroy OIDC role: cd infra/terraform/shared && terraform destroy"
 
 echo "✅ Destruction completed successfully!"

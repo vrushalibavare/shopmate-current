@@ -5,12 +5,12 @@
 
 output "ecr_repository_url" {
   description = "ECR repository URL for Docker image storage"
-  value       = aws_ecr_repository.shopmate.repository_url
+  value       = data.terraform_remote_state.shared.outputs.ecr_repository_url
 }
 
 output "ecs_cluster_name" {
   description = "ECS cluster name for service deployment"
-  value       = "shopmate-${var.environment}"
+  value       = aws_ecs_cluster.shopmate.name
 }
 
 output "application_url" {
@@ -20,7 +20,7 @@ output "application_url" {
 
 output "cloudwatch_dashboard_url" {
   description = "CloudWatch dashboard URL for monitoring"
-  value       = "https://console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=shopmate-${var.environment}"
+  value       = "https://console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=shopmate-dashboard-${var.environment}"
 }
 
 output "grafana_url" {
@@ -33,12 +33,28 @@ output "prometheus_url" {
   value       = "https://${var.domain_name}/prometheus"
 }
 
-output "alb_dns_name" {
-  description = "Application Load Balancer DNS name"
-  value       = aws_lb.shopmate.dns_name
+output "grafana_datasource_setup" {
+  description = "Commands to setup Grafana data sources and get UIDs"
+  value       = <<-EOT
+# After deployment, setup Grafana data sources:
+# 1. Access Grafana: https://${var.domain_name}/grafana (admin/admin123)
+# 2. Add CloudWatch data source (get UID from URL)
+# 3. Add Prometheus data source: https://${var.domain_name}/prometheus (get UID from URL)
+# 4. Run: ./update-dashboard.sh <cloudwatch_uid> <prometheus_uid> ${aws_ecs_cluster.shopmate.name} ${aws_ecs_service.shopmate.name} ${var.aws_region}
+EOT
 }
 
-output "alb_url" {
-  description = "Application Load Balancer URL"
-  value       = "https://${aws_lb.shopmate.dns_name}"
+output "main_service_name" {
+  description = "Main application ECS service name"
+  value       = aws_ecs_service.shopmate.name
+}
+
+output "prometheus_service_name" {
+  description = "Prometheus ECS service name"
+  value       = aws_ecs_service.prometheus.name
+}
+
+output "grafana_service_name" {
+  description = "Grafana ECS service name"
+  value       = aws_ecs_service.grafana.name
 }

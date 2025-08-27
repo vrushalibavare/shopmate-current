@@ -1,185 +1,111 @@
 # ShopMate E-commerce Application
 
-A simple e-commerce application built with Node.js and Express, designed to be deployed to AWS ECS Fargate.
+A cloud-native e-commerce application built with Node.js and Express, designed for AWS ECS Fargate with complete CI/CD automation.
 
-## Features
+## 🚀 Quick Start
 
-- Product listing and details
-- Shopping cart functionality
-- Checkout process
-- Order management
-- Responsive design
-- **Stateless architecture** with DynamoDB session storage
-- **Auto-scaling** with ECS Fargate
-- **Cloud-native design** for high availability
-
-## Prerequisites
-
-- Node.js (v14 or higher)
-- AWS CLI configured with appropriate permissions
-- Terraform (for infrastructure deployment)
-
-## Getting Started
+### Prerequisites
+- Node.js (v14+)
+- AWS CLI configured
+- Terraform (v1.0+)
 
 ### Local Development
-
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   cd shopmate-current
-   ```
-
-2. Install dependencies:
-   ```
-   cd app
-   npm install
-   ```
-
-3. Start the development server:
-   ```
-   npm run dev
-   ```
-
-4. Open your browser and navigate to `http://localhost:3000`
-
-**Note**: For full functionality including cart and orders, deploy to AWS as the app requires DynamoDB for data persistence.
-
-## Deployment to AWS ECS Fargate
-
-### Using the Deployment Script
-
-```
-./infra/deploy.sh [environment] [region]
+```bash
+cd app
+npm install
+npm run dev
+# App runs at http://localhost:3000
 ```
 
-For example:
-```
-./infra/deploy.sh dev ap-southeast-1
-```
+### AWS Deployment
+```bash
+# 1. Bootstrap infrastructure (one-time setup)
+./bootstrap-oidc.sh
 
-This will:
-1. Build and push the Docker image to ECR
-2. Apply the Terraform configuration for the specified environment
-3. Output the application URLs
+# 2. Add GitHub secret: AWS_GITHUB_ACTIONS_ROLE_ARN (from bootstrap output)
 
-### Manual Deployment
+# 3. Deploy via GitHub Actions (recommended)
+# Create PR: feature → dev → stage → production
 
-1. Build and tag the Docker image:
-   ```
-   docker build -t shopmate app/
-   docker tag shopmate:latest <aws-account-id>.dkr.ecr.ap-southeast-1.amazonaws.com/shopmate:latest
-   ```
-
-2. Push the image to ECR:
-   ```
-   aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin <aws-account-id>.dkr.ecr.ap-southeast-1.amazonaws.com
-   docker push <aws-account-id>.dkr.ecr.ap-southeast-1.amazonaws.com/shopmate:latest
-   ```
-
-3. Apply the Terraform configuration:
-   ```
-   cd infra/terraform/environments/dev  # or uat, prod
-   terraform init
-   terraform apply
-   ```
-
-## Environment Configuration
-
-- **dev**: Development environment (1 instance)
-- **uat**: User Acceptance Testing environment (2 instances)
-- **prod**: Production environment (3 instances)
-
-## Monitoring
-
-The application includes comprehensive monitoring with multiple tools:
-
-### CloudWatch Dashboard
-- CPU and memory utilization
-- Application logs
-- Request counts and latency
-- Access via AWS Console or deployment script output
-
-### Prometheus Metrics
-- Application performance metrics
-- Custom business metrics
-- Node.js runtime metrics
-- Access at: `https://your-domain.com/prometheus`
-
-### Grafana Dashboards
-- Visual dashboards and charts
-- Real-time monitoring
-- Custom alerting
-- Access at: `https://your-domain.com/grafana`
-
-All monitoring URLs are provided in the deployment script output.
-
-## Project Structure
-
-- `app/` - Application code
-  - `app.js` - Main application entry point
-  - `models/` - Data models
-  - `controllers/` - Request handlers
-  - `routes/` - API routes
-  - `views/` - EJS templates
-  - `public/` - Static assets
-  - `Dockerfile` - Container configuration
-- `infra/` - Infrastructure as Code
-  - `terraform/` - AWS infrastructure definitions
-  - `deploy.sh` - Deployment script
-  - `Dockerfile.prometheus` - Monitoring container
-- `docs/` - Complete project documentation
-- `testing/` - Test files
-
-## Stateless Architecture
-
-ShopMate implements a **true stateless architecture** for optimal cloud performance:
-
-### **How It Works**
-- **Session Storage**: User sessions stored in DynamoDB (not container memory)
-- **Any Container**: Load balancer can route requests to any healthy container
-- **Seamless Scaling**: New containers immediately functional without warm-up
-- **High Availability**: Container failures don't affect user sessions
-
-### **Example Flow**
-```
-1. User adds item → Container A → Stores session in DynamoDB
-2. User views cart → Container B → Reads session from DynamoDB ✅
-3. User checks out → Container C → Processes order with session data ✅
+# OR deploy manually
+./deploy.sh dev ap-southeast-1
 ```
 
-### **Benefits**
-- ✅ **Perfect for autoscaling** - containers are interchangeable
-- ✅ **No sticky sessions** - optimal load distribution
-- ✅ **Cloud-native** - follows 12-factor app principles
-- ✅ **Production-ready** - handles traffic spikes gracefully
+## 🏗️ Architecture
 
-### **Technical Implementation**
-- **Session Store**: `connect-dynamodb` with automatic TTL cleanup
-- **Shared State**: Cart, orders, and user data in DynamoDB
-- **Container Independence**: Each container can serve any user
+**Stateless Design**: Sessions stored in DynamoDB, containers are interchangeable
+**Auto-scaling**: ECS Fargate with target tracking
+**Multi-environment**: dev/uat/prod with workspace isolation
+**Security**: OIDC authentication, distroless containers, secrets management
 
-## Autoscaling Testing
+## 📊 Monitoring
 
-Test the stateless autoscaling with provided scripts:
+- **Application**: https://your-domain.com
+- **Grafana**: https://your-domain.com/grafana
+- **Prometheus**: https://your-domain.com/prometheus
+- **CloudWatch**: AWS Console dashboards
+
+## 🔧 Key Features
+
+- ✅ **Terraform workspaces** for environment isolation
+- ✅ **OIDC authentication** for secure CI/CD
+- ✅ **State locking** prevents concurrent deployments
+- ✅ **Secrets management** via AWS Secrets Manager
+- ✅ **Resource tagging** for cost tracking
+- ✅ **Zero-downtime deployments** with health checks
+- ✅ **Comprehensive monitoring** with Prometheus/Grafana
+
+## 📁 Project Structure
+
+```
+├── app/                    # Application code
+├── infra/terraform/        # Infrastructure as Code
+│   ├── shared/            # ECR, OIDC, State Locking
+│   ├── *.tf              # Environment resources
+│   └── terraform.tfvars.* # Environment configurations
+├── .github/workflows/      # CI/CD pipelines
+├── docs/                   # Detailed documentation
+└── *.sh                   # Deployment scripts
+```
+
+## 📚 Documentation
+
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Complete deployment instructions
+- **[CI/CD Guide](docs/CICD.md)** - GitHub Actions workflows
+- **[Testing Guide](docs/TESTING.md)** - End-to-end testing procedures
+
+## 🛠️ Commands
 
 ```bash
-# Gentle load testing (recommended)
-cd infra/scripts
-./gentle-autoscaling.sh
+# Deploy to environment
+./deploy.sh <env> <region>
 
-# Monitor scaling in real-time
-./monitor-scaling.sh
+# Destroy environment (preserves shared resources)
+./destroy.sh <env>
+
+# Destroy everything (including OIDC role)
+./destroy-shared.sh
+
+# Test autoscaling
+cd infra/scripts && ./gentle-autoscaling.sh
 ```
 
-**Expected behavior:**
-1. CPU increases to 70%+ → ECS scales containers
-2. Load distributes across multiple containers
-3. Cart/sessions work seamlessly across all containers
+## 🏷️ Environments
 
-## Documentation
+| Environment | URL | Containers | Image |
+|-------------|-----|------------|-------|
+| **dev** | shopmate.dev.sctp-sandbox.com | 1-3 | dev-latest |
+| **uat** | shopmate.uat.sctp-sandbox.com | 2-5 | prod-latest |
+| **prod** | shopmate.sctp-sandbox.com | 3-10 | prod-latest |
 
-Complete documentation is available in the [`docs/`](docs/) directory:
+## 🔐 Security
 
-- **[CI/CD Workflows](docs/CICD-WORKFLOWS.md)** - Deployment and workflow documentation
-- **[Infrastructure](docs/TERRAFORM_DOCUMENTATION.md)** - Terraform and AWS setup
-- **[Auto-scaling](docs/AUTOSCALING_GUIDE.md)** - Scaling configuration and testing
+- **OIDC authentication** replaces access keys
+- **Distroless containers** in UAT/prod (no shell access)
+- **Secrets in AWS Secrets Manager** (no hardcoded values)
+- **State locking** prevents concurrent modifications
+- **Resource tagging** for compliance and cost tracking
+
+---
+
+**Owner**: Group1 | **Project**: ShopMate | **Managed by**: Terraform

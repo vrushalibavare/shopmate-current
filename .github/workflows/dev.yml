@@ -4,10 +4,6 @@ on:
   pull_request:
     branches: [ dev ]
     types: [ closed ]
-    paths-ignore:
-      - 'infra/terraform/prometheus.yml'
-      - 'infra/Dockerfile.prometheus'
-      - 'infra/monitoring/**'
 
 env:
   AWS_REGION: ap-southeast-1
@@ -18,6 +14,9 @@ jobs:
   validate:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -25,8 +24,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup Terraform
@@ -34,25 +32,42 @@ jobs:
       with:
         terraform_version: 1.5.0
 
-    - name: Terraform Format Check
-      working-directory: infra/terraform/environments/dev
+    - name: Terraform Format Check (Main)
+      working-directory: infra/terraform
       run: terraform fmt -check
 
-    - name: Terraform Init
-      working-directory: infra/terraform/environments/dev
+    - name: Terraform Format Check (Shared)
+      working-directory: infra/terraform/shared
+      run: terraform fmt -check
+
+    - name: Terraform Init (Main)
+      working-directory: infra/terraform
       run: terraform init -reconfigure
 
-    - name: Terraform Validate
-      working-directory: infra/terraform/environments/dev
+    - name: Terraform Init (Shared)
+      working-directory: infra/terraform/shared
+      run: terraform init -reconfigure
+
+    - name: Terraform Validate (Main)
+      working-directory: infra/terraform
+      run: terraform validate
+
+    - name: Terraform Validate (Shared)
+      working-directory: infra/terraform/shared
       run: terraform validate
 
     - name: Terraform Plan
-      working-directory: infra/terraform/environments/dev
-      run: terraform plan
+      working-directory: infra/terraform
+      run: |
+        terraform workspace select dev || terraform workspace new dev
+        terraform plan -var-file="terraform.tfvars.dev"
 
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
     - name: Checkout code
@@ -61,45 +76,121 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
+
+    - name: Validate dev environment
+      run: |
+        echo "Validating dev environment..."
+        if [[ "${{ env.ENVIRONMENT }}" != "dev" ]]; then
+          echo "❌ Expected dev environment, got ${{ env.ENVIRONMENT }}"
+          exit 1
+        fi
+        if [[ ! -f "infra/terraform/terraform.tfvars.dev" ]]; then
+          echo "❌ Missing terraform.tfvars.dev file"
+          exit 1
+        fi
+        aws sts get-caller-identity
+        echo "✅ Dev environment validation passed"
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: 1.5.0
 
-    - name: Deploy with Terraform
-      working-directory: infra/terraform/environments/dev
-      env:
-        # TF_VAR_ prefix is Terraform's standard way to pass environment variables
-        # TF_VAR_image_tag automatically maps to var.image_tag in Terraform
-        # Overrides default "latest" with commit SHA for immutable deployments
-        TF_VAR_image_tag: ${{ github.sha }}
+    - name: Deploy shared infrastructure first
+      working-directory: infra/terraform/shared
       run: |
         terraform init -reconfigure
         terraform apply -auto-approve
+
+    - name: Deploy dev infrastructure
+      working-directory: infra/terraform
+      run: |
+        terraform init -reconfigure
+        terraform workspace select dev || terraform workspace new dev
+        terraform apply -var-file="terraform.tfvars.dev" -auto-approve
 
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Build and push Docker image
+    - name: Build and push development image (with shell access)
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }}
       run: |
-        docker buildx build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG app/
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest app/
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest
+
+    - name: Build and push production image (secure distroless, no shell)
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build -f app/Dockerfile.prod -t $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest app/
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest
+
+    - name: Build and push Prometheus image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build -f infra/Dockerfile.prometheus -t $ECR_REGISTRY/$ECR_REPOSITORY:prometheus infra/
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:prometheus
+
+    - name: Update ECS service with dev image
+      working-directory: infra/terraform
+      env:
+        TF_VAR_image_tag: dev-latest
+      run: |
+        terraform workspace select dev
+        terraform apply -var-file="terraform.tfvars.dev" -auto-approve
+        echo "✅ Dev deployed using dev-latest image (source: ${{ github.sha }})"
+        echo "🔒 Secure prod-latest image ready for promotion"
+
+    - name: Force ECS service updates
+      env:
+        AWS_REGION: ${{ env.AWS_REGION }}
+        ENVIRONMENT: ${{ env.ENVIRONMENT }}
+      run: |
+        cd infra/terraform
+        terraform workspace select $ENVIRONMENT
+        CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
+        MAIN_SERVICE=$(terraform output -raw main_service_name)
+        PROMETHEUS_SERVICE=$(terraform output -raw prometheus_service_name)
+        GRAFANA_SERVICE=$(terraform output -raw grafana_service_name)
+        
+        # Update main application service
+        aws ecs update-service \
+          --cluster $CLUSTER_NAME \
+          --service $MAIN_SERVICE \
+          --force-new-deployment \
+          --region $AWS_REGION
+        
+        # Update Prometheus service if it exists
+        if aws ecs describe-services --cluster $CLUSTER_NAME --services $PROMETHEUS_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $PROMETHEUS_SERVICE \
+            --force-new-deployment \
+            --region $AWS_REGION
+        fi
+        
+        # Update Grafana service if it exists  
+        if aws ecs describe-services --cluster $CLUSTER_NAME --services $GRAFANA_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $GRAFANA_SERVICE \
+            --force-new-deployment \
+            --region $AWS_REGION
+        fi
 
     - name: Get deployment URLs
-      working-directory: infra/terraform/environments/dev
+      working-directory: infra/terraform
       run: |
-        echo "✅ Deployment completed successfully!"
+        terraform workspace select dev
+        echo "✅ Development deployment completed successfully!"
         echo "🌐 Application URL: $(terraform output -raw application_url)"
         echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
         echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
         echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"
+        echo "📷 Source commit: ${{ github.sha }}"
+        echo "🔒 Images built: dev-latest (dev with shell), prod-latest (secure distroless for uat/prod)"

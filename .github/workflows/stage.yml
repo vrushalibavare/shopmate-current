@@ -21,6 +21,9 @@ jobs:
   validate:
     needs: check-source
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -28,35 +31,65 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
+
+    - name: Validate uat environment
+      run: |
+        echo "Validating uat environment..."
+        if [[ "${{ env.ENVIRONMENT }}" != "uat" ]]; then
+          echo "❌ Expected uat environment, got ${{ env.ENVIRONMENT }}"
+          exit 1
+        fi
+        if [[ ! -f "infra/terraform/terraform.tfvars.uat" ]]; then
+          echo "❌ Missing terraform.tfvars.uat file"
+          exit 1
+        fi
+        aws sts get-caller-identity
+        echo "✅ UAT environment validation passed"
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: 1.5.0
 
-    - name: Terraform Format Check
-      working-directory: infra/terraform/environments/uat
+    - name: Terraform Format Check (Main)
+      working-directory: infra/terraform
       run: terraform fmt -check
 
-    - name: Terraform Init
-      working-directory: infra/terraform/environments/uat
+    - name: Terraform Format Check (Shared)
+      working-directory: infra/terraform/shared
+      run: terraform fmt -check
+
+    - name: Terraform Init (Main)
+      working-directory: infra/terraform
       run: terraform init
 
-    - name: Terraform Validate
-      working-directory: infra/terraform/environments/uat
+    - name: Terraform Init (Shared)
+      working-directory: infra/terraform/shared
+      run: terraform init
+
+    - name: Terraform Validate (Main)
+      working-directory: infra/terraform
+      run: terraform validate
+
+    - name: Terraform Validate (Shared)
+      working-directory: infra/terraform/shared
       run: terraform validate
 
     - name: Terraform Plan
-      working-directory: infra/terraform/environments/uat
-      run: terraform plan
+      working-directory: infra/terraform
+      run: |
+        terraform workspace select uat || terraform workspace new uat
+        terraform plan -var-file="terraform.tfvars.uat"
 
   deploy:
     needs: validate
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
     - name: Checkout code
@@ -65,8 +98,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup Terraform
@@ -74,31 +106,77 @@ jobs:
       with:
         terraform_version: 1.5.0
 
-    - name: Get source commit SHA
-      id: source-commit
+    - name: Validate production image exists
       run: |
-        # Get the commit SHA from the dev branch that was merged
-        SOURCE_SHA=$(git log --format="%H" -n 1 origin/dev)
-        echo "source_sha=$SOURCE_SHA" >> $GITHUB_OUTPUT
-        echo "Using image from dev deployment: $SOURCE_SHA"
+        echo "🔒 Validating production image exists for UAT deployment..."
+        if ! aws ecr describe-images --repository-name shopmate --image-ids imageTag=prod-latest --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+          echo "❌ Production image 'prod-latest' not found. Please run deployment on 'dev' environment first."
+          exit 1
+        fi
+        echo "✅ Production image found, using secure distroless image"
 
-    - name: Deploy with Terraform (reuse dev image)
-      working-directory: infra/terraform/environments/uat
-      env:
-        # TF_VAR_ prefix is Terraform's standard way to pass environment variables
-        # TF_VAR_image_tag automatically maps to var.image_tag in Terraform
-        # Uses source commit SHA to promote same tested image from dev
-        TF_VAR_image_tag: ${{ steps.source-commit.outputs.source_sha }}
+    - name: Deploy shared infrastructure first
+      working-directory: infra/terraform/shared
       run: |
         terraform init -reconfigure
         terraform apply -auto-approve
 
-    - name: Get deployment URLs
-      working-directory: infra/terraform/environments/uat
+    - name: Deploy with Terraform (use secure prod image)
+      working-directory: infra/terraform
+      env:
+        TF_VAR_image_tag: prod-latest
       run: |
-        echo "✅ Staging deployment completed successfully!"
+        terraform init -reconfigure
+        terraform workspace select uat || terraform workspace new uat
+        terraform apply -var-file="terraform.tfvars.uat" -auto-approve
+        echo "✅ UAT deployed using prod-latest image (source: ${{ github.sha }})"
+        echo "🔒 Using secure distroless image (no shell access)"
+
+    - name: Force ECS service updates
+      env:
+        AWS_REGION: ${{ env.AWS_REGION }}
+        ENVIRONMENT: ${{ env.ENVIRONMENT }}
+      run: |
+        cd infra/terraform
+        terraform workspace select $ENVIRONMENT
+        CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
+        MAIN_SERVICE=$(terraform output -raw main_service_name)
+        PROMETHEUS_SERVICE=$(terraform output -raw prometheus_service_name)
+        GRAFANA_SERVICE=$(terraform output -raw grafana_service_name)
+        
+        # Update main application service
+        aws ecs update-service \
+          --cluster $CLUSTER_NAME \
+          --service $MAIN_SERVICE \
+          --force-new-deployment \
+          --region $AWS_REGION
+        
+        # Update Prometheus service if it exists
+        if aws ecs describe-services --cluster $CLUSTER_NAME --services $PROMETHEUS_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $PROMETHEUS_SERVICE \
+            --force-new-deployment \
+            --region $AWS_REGION
+        fi
+        
+        # Update Grafana service if it exists
+        if aws ecs describe-services --cluster $CLUSTER_NAME --services $GRAFANA_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $GRAFANA_SERVICE \
+            --force-new-deployment \
+            --region $AWS_REGION
+        fi
+
+    - name: Get deployment URLs
+      working-directory: infra/terraform
+      run: |
+        terraform workspace select uat
+        echo "✅ UAT deployment completed successfully!"
         echo "🌐 Application URL: $(terraform output -raw application_url)"
         echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
         echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
         echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"
-        echo "📷 Using Docker image: ${{ steps.source-commit.outputs.source_sha }}"
+        echo "📷 Source commit: ${{ github.sha }}"
+        echo "🔒 Using prod-latest image (secure distroless, no shell access)"
