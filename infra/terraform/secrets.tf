@@ -5,8 +5,10 @@
 
 # Grafana admin password
 resource "aws_secretsmanager_secret" "grafana_password" {
-  name        = "shopmate/${var.environment}/grafana-admin-password"
-  description = "Grafana admin password for ${var.environment} environment"
+  name                           = "shopmate/${var.environment}/grafana-admin-password"
+  description                    = "Grafana admin password for ${var.environment} environment"
+  force_overwrite_replica_secret = true
+  recovery_window_in_days        = 0
 }
 
 resource "aws_secretsmanager_secret_version" "grafana_password" {
