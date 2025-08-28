@@ -30,7 +30,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.11.4
 
     - name: Terraform Format Check (Main)
       working-directory: infra/terraform
@@ -119,7 +119,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.11.4
 
     - name: Deploy shared infrastructure first
       working-directory: infra/terraform/shared
