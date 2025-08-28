@@ -63,6 +63,17 @@ jobs:
         soft_fail: true
         additional_args: --minimum-severity HIGH
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: app/package-lock.json
+
+    - name: Install dependencies
+      working-directory: app
+      run: npm ci
+
     - name: Node.js Security Audit
       working-directory: app
       run: |
@@ -159,8 +170,6 @@ jobs:
 
     - name: Update ECS service with dev image
       working-directory: infra/terraform
-      env:
-        TF_VAR_image_tag: dev-latest
       run: |
         terraform workspace select dev
         terraform apply -var-file="terraform.tfvars.dev" -auto-approve
