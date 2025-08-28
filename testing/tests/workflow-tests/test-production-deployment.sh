@@ -17,7 +17,14 @@ fi
 echo "2. Ensuring stage is up to date..."
 git pull origin stage
 
-echo "3. Creating PR from stage to production..."
+echo "3. Creating test change to trigger workflow..."
+echo "Production deployment test $(date)" > prod-test-$(date +%s).tmp
+git add .
+git commit -m "test: trigger production deployment workflow"
+git push origin stage
+echo "   ✅ Test change created and pushed"
+
+echo "4. Creating PR from stage to production..."
 echo "   This will trigger the production deployment workflow"
 echo "   
    Steps to complete manually:
@@ -28,7 +35,7 @@ echo "
    5. Check GitHub Actions for workflow execution
    "
 
-echo "4. Monitoring deployment..."
+echo "5. Monitoring deployment..."
 echo "   Check these after PR merge:"
 echo "   - GitHub Actions: https://github.com/$(git config --get remote.origin.url | sed 's/.*github.com[:/]\([^.]*\).*/\1/')/actions"
 echo "   - AWS ECS Console: https://console.aws.amazon.com/ecs/home?region=ap-southeast-1#/clusters"
