@@ -23,6 +23,9 @@ jobs:
   destroy:
     runs-on: ubuntu-latest
     if: github.event.inputs.confirm == 'DESTROY'
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
     - name: Checkout code
@@ -31,28 +34,26 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.11.4
 
-    - name: Destroy Infrastructure (skip ECR if it fails)
+    - name: Destroy Infrastructure
       working-directory: infra/terraform
-      continue-on-error: true
+      env:
+        ENVIRONMENT: ${{ github.event.inputs.environment }}
       run: |
         terraform init -reconfigure
-        # Try to destroy everything, but continue if ECR fails due to images
-        terraform destroy -auto-approve || {
-          echo "⚠️ Some resources couldn't be destroyed (likely ECR with images)"
-          echo "Use the ECR cleanup workflow to remove images and repository if needed"
-          exit 0
-        }
+        terraform workspace select $ENVIRONMENT || terraform workspace new $ENVIRONMENT
+        terraform destroy -var-file="terraform.tfvars.$ENVIRONMENT" -auto-approve
+        echo "✅ $ENVIRONMENT environment destroyed successfully"
 
     - name: Summary
       run: |
-        echo "✅ Infrastructure destroyed for environment: ${{ github.event.inputs.environment }}"
-        echo "📝 Note: ECR repository and images are preserved (shared across environments)"
+        echo "🗑️ Infrastructure destroyed for environment: ${{ github.event.inputs.environment }}"
+        echo "📝 Note: Shared resources (ECR, OIDC, DynamoDB) are preserved"
+        echo "🔄 To destroy shared resources, use the 'Destroy Shared Infrastructure' workflow"
