@@ -1,0 +1,70 @@
+name: Destroy Shared Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm deletion of shared resources'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: ap-southeast-1
+
+jobs:
+  destroy-shared:
+    if: github.event.inputs.confirm_destroy == 'DESTROY'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.11.4
+
+    - name: Destroy ECR and DynamoDB (preserve OIDC role)
+      working-directory: infra/terraform/shared
+      run: |
+        terraform init -reconfigure
+        
+        # Destroy specific resources, keeping OIDC role
+        terraform destroy -target=aws_ecr_repository.shopmate -auto-approve
+        terraform destroy -target=aws_ecr_lifecycle_policy.shopmate -auto-approve
+        terraform destroy -target=aws_dynamodb_table.terraform_locks -auto-approve
+        
+        echo "✅ Destroyed ECR repository and DynamoDB table"
+        echo "🔒 OIDC role preserved for this workflow"
+
+    - name: Manual cleanup instructions
+      run: |
+        echo "🚨 MANUAL CLEANUP REQUIRED"
+        echo "========================="
+        echo ""
+        echo "📋 What was destroyed:"
+        echo "   ✅ ECR Repository: shopmate (all container images deleted)"
+        echo "   ✅ DynamoDB Table: Terraform state locking"
+        echo ""
+        echo "⚠️  What remains (manual cleanup needed):"
+        echo "   🔒 OIDC Role: aws_iam_role.github_actions"
+        echo "   🔒 OIDC Policy: aws_iam_role_policy.github_actions_policy"
+        echo ""
+        echo "🖥️  To complete destruction, run locally:"
+        echo "   cd infra/terraform/shared"
+        echo "   terraform destroy -target=aws_iam_role.github_actions -auto-approve"
+        echo "   terraform destroy -target=aws_iam_role_policy.github_actions_policy -auto-approve"
+        echo ""
+        echo "🔄 To restore everything:"
+        echo "   1. Run: ./bootstrap-oidc.sh"
+        echo "   2. Update GitHub secret: AWS_GITHUB_ACTIONS_ROLE_ARN"

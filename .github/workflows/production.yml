@@ -51,7 +51,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.11.4
 
     - name: Terraform Format Check (Main)
       working-directory: infra/terraform
@@ -63,11 +63,11 @@ jobs:
 
     - name: Terraform Init (Main)
       working-directory: infra/terraform
-      run: terraform init
+      run: terraform init -reconfigure
 
     - name: Terraform Init (Shared)
       working-directory: infra/terraform/shared
-      run: terraform init
+      run: terraform init -reconfigure
 
     - name: Terraform Validate (Main)
       working-directory: infra/terraform
@@ -104,7 +104,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.11.4
 
     - name: Validate production image exists
       run: |
@@ -123,8 +123,6 @@ jobs:
 
     - name: Deploy with Terraform (use secure prod image)
       working-directory: infra/terraform
-      env:
-        TF_VAR_image_tag: prod-latest
       run: |
         terraform init -reconfigure
         terraform workspace select prod || terraform workspace new prod
