@@ -30,7 +30,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.11.4
 
     - name: Terraform Format Check (Main)
       working-directory: infra/terraform
@@ -62,6 +62,17 @@ jobs:
         working_directory: infra/terraform
         soft_fail: true
         additional_args: --minimum-severity HIGH
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: app/package-lock.json
+
+    - name: Install dependencies
+      working-directory: app
+      run: npm ci
 
     - name: Node.js Security Audit
       working-directory: app
@@ -108,7 +119,7 @@ jobs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_version: 1.5.0
+        terraform_version: 1.11.4
 
     - name: Deploy shared infrastructure first
       working-directory: infra/terraform/shared
@@ -159,8 +170,6 @@ jobs:
 
     - name: Update ECS service with dev image
       working-directory: infra/terraform
-      env:
-        TF_VAR_image_tag: dev-latest
       run: |
         terraform workspace select dev
         terraform apply -var-file="terraform.tfvars.dev" -auto-approve
