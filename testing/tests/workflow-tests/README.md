@@ -16,6 +16,12 @@ Essential scripts for testing GitHub Actions workflows.
 - **Trigger**: Creates stage → production PR
 - **Usage**: `./test-production-deployment.sh`
 
+### `test-container-access.sh`
+- **Purpose**: Verify container security across environments
+- **Branch**: Run from any branch
+- **Tests**: Shell access (dev=allow, uat/prod=block)
+- **Usage**: `./test-container-access.sh`
+
 ## Workflow
 
 ```
