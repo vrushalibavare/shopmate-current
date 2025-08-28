@@ -56,6 +56,18 @@ jobs:
       working-directory: infra/terraform/shared
       run: terraform validate
 
+    - name: Terraform Security Scan
+      uses: aquasecurity/tfsec-action@v1.0.3
+      with:
+        working_directory: infra/terraform
+        soft_fail: true
+        additional_args: --minimum-severity HIGH
+
+    - name: Node.js Security Audit
+      working-directory: app
+      run: |
+        npm audit --audit-level=high || echo "⚠️ High severity vulnerabilities found - review required"
+
     - name: Terraform Plan
       working-directory: infra/terraform
       run: |
@@ -128,6 +140,15 @@ jobs:
       run: |
         docker build -f app/Dockerfile.prod -t $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest app/
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest
+
+    - name: Container Security Scan
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          aquasec/trivy image --severity HIGH,CRITICAL \
+          --exit-code 1 \
+          $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest || echo "⚠️ Container vulnerabilities found - review required"
 
     - name: Build and push Prometheus image
       env:
