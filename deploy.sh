@@ -39,20 +39,43 @@ TERRAFORM_DIR="infra/terraform"
 echo "🧹 Cleaning local Terraform cache for fresh start..."
 rm -rf $TERRAFORM_DIR/.terraform $TERRAFORM_DIR/.terraform.lock.hcl
 
+# ============================================================================
+# FETCH SECURE BACKEND CONFIGURATIONS
+# ============================================================================
+# Retrieve Terraform backend configurations from AWS Parameter Store
+# This secure approach ensures:
+# - No hardcoded sensitive data in the repository
+# - Runtime fetching of encrypted backend configs
+# - IAM-controlled access via OIDC role
+echo "🔐 Fetching backend configurations from Parameter Store..."
+# Fetch main terraform backend config (for environment workspaces)
+aws ssm get-parameter \
+  --name "/terraform/backend/shopmate" \
+  --with-decryption \
+  --query "Parameter.Value" \
+  --output text > infra/terraform/backend.hcl
+
+# Fetch shared terraform backend config (for shared infrastructure)
+aws ssm get-parameter \
+  --name "/terraform/backend/shopmate-shared" \
+  --with-decryption \
+  --query "Parameter.Value" \
+  --output text > infra/terraform/shared/backend.hcl
+
 # Initialize and validate terraform configurations
 echo "🔍 Initializing and validating Terraform configurations..."
-(cd infra/terraform && terraform init && terraform validate)
-(cd infra/terraform/shared && terraform init && terraform validate)
+(cd infra/terraform && terraform init -reconfigure -backend-config=backend.hcl && terraform validate)
+(cd infra/terraform/shared && terraform init -reconfigure -backend-config=backend.hcl && terraform validate)
 echo "✅ Terraform validation passed"
 
 # Deploy shared infrastructure first (ECR repository)
 echo "📦 Deploying shared infrastructure..."
-(cd infra/terraform/shared && terraform init && terraform apply -auto-approve)
+(cd infra/terraform/shared && terraform init -reconfigure -backend-config=backend.hcl && terraform apply -auto-approve)
 
 # Deploy environment-specific infrastructure using workspace
 echo "📦 Deploying $ENVIRONMENT infrastructure using workspace..."
 (cd $TERRAFORM_DIR && 
-  terraform init && 
+  terraform init -reconfigure -backend-config=backend.hcl && 
   terraform workspace select $ENVIRONMENT || terraform workspace new $ENVIRONMENT && 
   echo "📍 Current workspace: $(terraform workspace show)" && 
   echo "🎯 Target environment: $ENVIRONMENT" && 
@@ -94,7 +117,7 @@ docker buildx create --use --name multiarch-builder 2>/dev/null || docker buildx
 
 # Build application images based on environment
 if [ "$ENVIRONMENT" = "dev" ]; then
-  echo "📱 Building development image (with shell access)..."
+  echo "🐛 Building development image with debug capabilities (restricted shell access)..."
   docker buildx build \
     --platform linux/amd64,linux/arm64 \
     --tag $ECR_URL:dev-latest \

@@ -1,42 +1,55 @@
-# ShopMate Scripts
+# ShopMate Autoscaling Scripts
 
-This directory contains utility scripts for testing and monitoring the ShopMate application.
+Essential scripts for testing and monitoring ECS Fargate autoscaling.
 
-## Available Scripts
+## Scripts
 
-### Auto-scaling Testing
-- **[autoscaling-test.sh](autoscaling-test.sh)** - Load testing script to trigger auto-scaling
-- **[monitor-scaling.sh](monitor-scaling.sh)** - Monitor ECS service scaling metrics
-
-## Usage
-
-### Auto-scaling Test
+### `gentle-autoscaling.sh`
+**Purpose**: Gradual load testing to trigger smooth autoscaling
+**Usage**: 
 ```bash
-# Test auto-scaling for dev environment
-./scripts/autoscaling-test.sh dev
+./gentle-autoscaling.sh [environment]
 
-# Test with custom parameters
-./scripts/autoscaling-test.sh prod 100 30
+# Examples:
+./gentle-autoscaling.sh dev
+./gentle-autoscaling.sh uat
+./gentle-autoscaling.sh prod
 ```
 
-### Monitor Scaling
-```bash
-# Monitor dev environment scaling
-./scripts/monitor-scaling.sh dev
+**How it works**:
+- Phase 1: Starts with 2 concurrent requests
+- Phase 2: Increases to 3 requests  
+- Phase 3: Steady 4 requests every 25 seconds
+- Each request runs for 20 seconds of CPU work
+- Designed to gradually increase CPU to trigger autoscaling
 
-# Monitor with custom interval
-./scripts/monitor-scaling.sh prod 10
+### `monitor-scaling.sh`
+**Purpose**: Monitor ECS service scaling metrics in real-time
+**Usage**:
+```bash
+./monitor-scaling.sh [environment] [interval_seconds]
+
+# Examples:
+./monitor-scaling.sh dev
+./monitor-scaling.sh uat 10
 ```
+
+**Shows**:
+- Current task count
+- CPU and memory utilization
+- Scaling events
+- Target tracking metrics
+
+## Testing Workflow
+
+1. **Start monitoring**: `./monitor-scaling.sh dev`
+2. **Start load test**: `./gentle-autoscaling.sh dev` 
+3. **Watch scaling**: Monitor shows tasks scaling up when CPU > 70%
+4. **Stop test**: Ctrl+C to stop load, watch scale-down after 10-15 minutes
 
 ## Notes
 
-- **Deployment and Destroy**: Use GitHub Actions workflows instead of scripts
-- **Secret Management**: Handled automatically by Terraform with AWS Secrets Manager
-- **Infrastructure Management**: Use Terraform commands in environment directories
-
-## Deprecated Scripts
-
-The following scripts have been replaced by automated workflows:
-- `deploy.sh` → Use GitHub Actions dev/stage/production workflows
-- `destroy.sh` → Use GitHub Actions destroy workflow
-- `generate-secrets.sh` → Terraform generates secrets automatically
+- **Scaling triggers**: CPU > 70% for 2 minutes → scale up
+- **Scale down**: CPU < 70% for 15 minutes → scale down  
+- **Gentle approach**: Avoids overwhelming containers
+- **Environment-specific**: Gets URLs from Terraform outputs

@@ -8,14 +8,10 @@
 terraform {
   required_version = ">= 1.0"
 
-  backend "s3" {
-    bucket               = "sctp-ce10-tfstate"
-    key                  = "shopmate/terraform.tfstate"
-    region               = "ap-southeast-1"
-    encrypt              = true
-    workspace_key_prefix = "env"
-    dynamodb_table       = "terraform-state-locks"
-  }
+  # Backend configuration is externalized for security
+  # Actual config is stored in AWS Parameter Store and fetched at runtime
+  # This prevents sensitive backend details from being stored in the repository
+  backend "s3" {}
 
   required_providers {
     aws = {

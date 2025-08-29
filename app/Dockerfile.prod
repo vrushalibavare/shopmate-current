@@ -7,8 +7,28 @@ RUN npm ci --only=production && npm cache clean --force
 
 COPY . .
 
-# Production stage with distroless image (minimal, no shell)
-FROM gcr.io/distroless/nodejs18-debian11
+# ============================================================================
+# PRODUCTION DOCKERFILE - DISTROLESS WITH DEBUG
+# ============================================================================
+# Production stage with distroless debug image for secure debugging
+#
+# Base Image: gcr.io/distroless/nodejs18-debian11:debug
+# - Minimal distroless container with debug shell access
+# - Only essential runtime components (no package managers)
+# - Busybox shell for basic debugging and troubleshooting
+# - Smaller attack surface compared to full OS images
+# - More secure than full Alpine but still debuggable
+#
+# Differences from Dev:
+# - No package manager (apk/apt) - cannot install additional tools
+# - Minimal shell (busybox only) - basic commands available
+# - Smaller image size and reduced attack surface
+# - Production-optimized while maintaining debug capability
+#
+# Use Case: Production environment requiring minimal debug access
+# Security: High - distroless benefits with minimal debug capability
+# ============================================================================
+FROM gcr.io/distroless/nodejs18-debian11:debug
 
 WORKDIR /app
 
