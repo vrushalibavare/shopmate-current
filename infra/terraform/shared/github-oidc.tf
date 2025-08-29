@@ -57,7 +57,10 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "secretsmanager:*",
           "cloudwatch:*",
           "s3:*",
-          "application-autoscaling:*"
+          "application-autoscaling:*",
+          # Parameter Store permissions for secure backend configuration access
+          "ssm:GetParameter",
+          "ssm:PutParameter"
         ]
         Resource = "*"
       }

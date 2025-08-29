@@ -3,6 +3,9 @@
 # ============================================================================
 # Identity and Access Management for ECS tasks and AWS service integration
 #
+# NOTE: GitHub Actions deployment permissions (including Parameter Store access
+# for secure backend configuration) are defined in shared/github-oidc.tf
+#
 # CREATION FLOW:
 # 1. Secrets Generation & Storage (Application Security)
 # 2. IAM Roles (Identity Definitions)
@@ -136,11 +139,10 @@ resource "aws_iam_policy" "cloudwatch_read" {
   })
 }
 
-# ECS Exec access policy - Dev environment debugging only
+# ECS Exec access policy - All environments (security controlled by container image)
 resource "aws_iam_policy" "ecs_exec_access" {
-  count       = var.environment == "dev" ? 1 : 0
   name        = "shopmate-ecs-exec-access-${var.environment}"
-  description = "Allow ECS Exec access for debugging in dev environment"
+  description = "Allow ECS Exec access for debugging (security controlled by container capabilities)"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -193,9 +195,8 @@ resource "aws_iam_role_policy_attachment" "task_role_cloudwatch" {
   policy_arn = aws_iam_policy.cloudwatch_read.arn
 }
 
-# Attach ECS Exec access to task role (dev environment only)
+# Attach ECS Exec access to task role (all environments)
 resource "aws_iam_role_policy_attachment" "task_role_ecs_exec" {
-  count      = var.environment == "dev" ? 1 : 0
   role       = aws_iam_role.ecs_task_role.name
-  policy_arn = aws_iam_policy.ecs_exec_access[0].arn
+  policy_arn = aws_iam_policy.ecs_exec_access.arn
 }

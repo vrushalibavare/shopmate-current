@@ -1,36 +1,64 @@
 # ============================================================================
-# DEVELOPMENT DEPLOYMENT WORKFLOW
+# REUSABLE DEPLOYMENT WORKFLOW
 # ============================================================================
-# This workflow handles the complete CI/CD pipeline for the development environment
+# This reusable workflow handles deployment for STAGE and PRODUCTION environments
 # 
-# Unique Features (why it doesn't use reusable workflow):
-# - Builds Docker images (dev-latest and prod-latest)
-# - Node.js security audit and dependency scanning
-# - Container security scanning with Trivy
-# - No GitHub environment protection (direct deployment)
-# - Uses dev-latest image with debug capabilities
-# - Comprehensive validation and testing
+# Purpose:
+# - Eliminates code duplication between stage.yml and production.yml
+# - Provides consistent deployment logic across environments
+# - Uses secure backend configuration from Parameter Store
 # 
-# Triggered by: PR merge to dev branch
-# Promotion flow: This is the entry point - creates images for stage/prod
-# Backend config: Fetched securely from Parameter Store
+# Used by:
+# - stage.yml (uat environment, dev → stage promotion)
+# - production.yml (prod environment, stage → production promotion)
+# 
+# NOT used by:
+# - dev.yml (has unique CI/CD features: image building, security scans, Node.js audit)
+# 
+# Key Features:
+# - Validates source branch (enforces promotion flow)
+# - Uses existing prod-latest image (built in dev workflow)
+# - Applies GitHub environment protection (staging/production)
+# - Fetches backend config securely from Parameter Store
+# - Deploys using secure distroless images with debug capabilities
 # ============================================================================
 
-name: Deploy to Development
+name: Reusable Deploy Workflow
 
 on:
-  pull_request:
-    branches: [ dev ]
-    types: [ closed ]
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: 'Environment to deploy to (uat/prod)'
+      source_branch:
+        required: true
+        type: string
+        description: 'Expected source branch (dev/stage)'
+      target_branch:
+        required: true
+        type: string
+        description: 'Target branch (stage/production)'
+      github_environment:
+        required: true
+        type: string
+        description: 'GitHub environment for approvals (staging/production)'
 
 env:
   AWS_REGION: ap-southeast-1
   ECR_REPOSITORY: shopmate
-  ENVIRONMENT: dev
 
 jobs:
+  check-source:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == inputs.target_branch && github.event.pull_request.head.ref == inputs.source_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate source branch
+        run: echo "PR from ${{ inputs.source_branch }} to ${{ inputs.target_branch }} approved"
+
   validate:
-    if: github.event.pull_request.merged == true
+    needs: check-source
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -38,6 +66,22 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Validate environment
+      run: |
+        echo "Validating ${{ inputs.environment }} environment..."
+        if [[ ! -f "infra/terraform/terraform.tfvars.${{ inputs.environment }}" ]]; then
+          echo "❌ Missing terraform.tfvars.${{ inputs.environment }} file"
+          exit 1
+        fi
+        aws sts get-caller-identity
+        echo "✅ ${{ inputs.environment }} environment validation passed"
 
     - name: Get backend configurations from Parameter Store
       run: |
@@ -85,38 +129,16 @@ jobs:
       working-directory: infra/terraform/shared
       run: terraform validate
 
-    - name: Terraform Security Scan
-      uses: aquasecurity/tfsec-action@v1.0.3
-      with:
-        working_directory: infra/terraform
-        soft_fail: true
-        additional_args: --minimum-severity HIGH
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: app/package-lock.json
-
-    - name: Install dependencies
-      working-directory: app
-      run: npm ci
-
-    - name: Node.js Security Audit
-      working-directory: app
-      run: |
-        npm audit --audit-level=high || echo "⚠️ High severity vulnerabilities found - review required"
-
     - name: Terraform Plan
       working-directory: infra/terraform
       run: |
-        terraform workspace select dev || terraform workspace new dev
-        terraform plan -var-file="terraform.tfvars.dev"
+        terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }}
+        terraform plan -var-file="terraform.tfvars.${{ inputs.environment }}"
 
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    environment: ${{ inputs.github_environment }}
     permissions:
       id-token: write
       contents: read
@@ -148,24 +170,19 @@ jobs:
         
         echo "✅ Backend configurations retrieved securely"
 
-    - name: Validate dev environment
-      run: |
-        echo "Validating dev environment..."
-        if [[ "${{ env.ENVIRONMENT }}" != "dev" ]]; then
-          echo "❌ Expected dev environment, got ${{ env.ENVIRONMENT }}"
-          exit 1
-        fi
-        if [[ ! -f "infra/terraform/terraform.tfvars.dev" ]]; then
-          echo "❌ Missing terraform.tfvars.dev file"
-          exit 1
-        fi
-        aws sts get-caller-identity
-        echo "✅ Dev environment validation passed"
-
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: 1.11.4
+
+    - name: Validate production image exists
+      run: |
+        echo "🔒 Validating production image exists for ${{ inputs.environment }} deployment..."
+        if ! aws ecr describe-images --repository-name shopmate --image-ids imageTag=prod-latest --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+          echo "❌ Production image 'prod-latest' not found. Please run deployment on 'dev' environment first."
+          exit 1
+        fi
+        echo "✅ Production image found, using secure distroless image"
 
     - name: Deploy shared infrastructure first
       working-directory: infra/terraform/shared
@@ -173,62 +190,19 @@ jobs:
         terraform init -reconfigure -backend-config=backend.hcl
         terraform apply -auto-approve
 
-    - name: Deploy dev infrastructure
+    - name: Deploy with Terraform (use secure prod image)
       working-directory: infra/terraform
       run: |
         terraform init -reconfigure -backend-config=backend.hcl
-        terraform workspace select dev || terraform workspace new dev
-        terraform apply -var-file="terraform.tfvars.dev" -auto-approve
-
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-
-    - name: Build and push development image (with shell access)
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-      run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest app/
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest
-
-    - name: Build and push production image (secure distroless, no shell)
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-      run: |
-        docker build -f app/Dockerfile.prod -t $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest app/
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest
-
-    - name: Container Security Scan
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-      run: |
-        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-          aquasec/trivy image --severity HIGH,CRITICAL \
-          --exit-code 1 \
-          $ECR_REGISTRY/$ECR_REPOSITORY:prod-latest || echo "⚠️ Container vulnerabilities found - review required"
-
-    - name: Build and push Prometheus image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-      run: |
-        docker build -f infra/Dockerfile.prometheus -t $ECR_REGISTRY/$ECR_REPOSITORY:prometheus infra/
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:prometheus
-
-    - name: Update ECS service with dev image
-      working-directory: infra/terraform
-      run: |
-        terraform workspace select dev
-        terraform apply -var-file="terraform.tfvars.dev" -auto-approve
-        echo "✅ Dev deployed using dev-latest image (source: ${{ github.sha }})"
-        echo "🔒 Secure prod-latest image ready for promotion"
+        terraform workspace select ${{ inputs.environment }} || terraform workspace new ${{ inputs.environment }}
+        terraform apply -var-file="terraform.tfvars.${{ inputs.environment }}" -auto-approve
+        echo "✅ ${{ inputs.environment }} deployed using prod-latest image (source: ${{ github.sha }})"
+        echo "🔒 Using secure distroless image with debug capabilities"
 
     - name: Force ECS service updates
-      env:
-        AWS_REGION: ${{ env.AWS_REGION }}
-        ENVIRONMENT: ${{ env.ENVIRONMENT }}
       run: |
         cd infra/terraform
-        terraform workspace select $ENVIRONMENT
+        terraform workspace select ${{ inputs.environment }}
         CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
         MAIN_SERVICE=$(terraform output -raw main_service_name)
         PROMETHEUS_SERVICE=$(terraform output -raw prometheus_service_name)
@@ -239,34 +213,34 @@ jobs:
           --cluster $CLUSTER_NAME \
           --service $MAIN_SERVICE \
           --force-new-deployment \
-          --region $AWS_REGION
+          --region ${{ env.AWS_REGION }}
         
         # Update Prometheus service if it exists
-        if aws ecs describe-services --cluster $CLUSTER_NAME --services $PROMETHEUS_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
+        if aws ecs describe-services --cluster $CLUSTER_NAME --services $PROMETHEUS_SERVICE --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $PROMETHEUS_SERVICE \
             --force-new-deployment \
-            --region $AWS_REGION
+            --region ${{ env.AWS_REGION }}
         fi
         
-        # Update Grafana service if it exists  
-        if aws ecs describe-services --cluster $CLUSTER_NAME --services $GRAFANA_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
+        # Update Grafana service if it exists
+        if aws ecs describe-services --cluster $CLUSTER_NAME --services $GRAFANA_SERVICE --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $GRAFANA_SERVICE \
             --force-new-deployment \
-            --region $AWS_REGION
+            --region ${{ env.AWS_REGION }}
         fi
 
     - name: Get deployment URLs
       working-directory: infra/terraform
       run: |
-        terraform workspace select dev
-        echo "✅ Development deployment completed successfully!"
+        terraform workspace select ${{ inputs.environment }}
+        echo "✅ ${{ inputs.environment }} deployment completed successfully!"
         echo "🌐 Application URL: $(terraform output -raw application_url)"
         echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
         echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
         echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"
         echo "📷 Source commit: ${{ github.sha }}"
-        echo "🔒 Images built: dev-latest (dev with shell), prod-latest (secure distroless for uat/prod)"
+        echo "🔒 Using prod-latest image (secure distroless with debug capabilities)"

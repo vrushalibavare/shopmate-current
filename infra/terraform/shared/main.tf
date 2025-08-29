@@ -1,10 +1,8 @@
 terraform {
-  backend "s3" {
-    bucket  = "sctp-ce10-tfstate"
-    key     = "shopmate/shared/terraform.tfstate"
-    region  = "ap-southeast-1"
-    encrypt = true
-  }
+  # Backend configuration is externalized for security
+  # Actual config is stored in AWS Parameter Store and fetched at runtime
+  # This prevents sensitive backend details from being stored in the repository
+  backend "s3" {}
 }
 
 # AWS Provider Configuration with shared tags
