@@ -3,17 +3,6 @@
 # ============================================================================
 # ECR repository reference and DynamoDB tables for application data storage
 
-# Reference to shared ECR repository from remote state
-data "terraform_remote_state" "shared" {
-  backend = "s3"
-  config = {
-    bucket = "sctp-ce10-tfstate"
-    key    = "shopmate/shared/terraform.tfstate"
-    region = var.aws_region
-  }
-}
-
-
 
 # ============================================================================
 # 3. DYNAMODB TABLES - Application Data Storage
