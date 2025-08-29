@@ -23,33 +23,44 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     if: github.event.inputs.confirm == 'CLEANUP'
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Cleanup ECR Images
       if: github.event.inputs.action == 'cleanup-images'
       run: |
-        echo "🧹 Cleaning up old ECR images..."
-        aws ecr list-images --repository-name $ECR_REPOSITORY --region $AWS_REGION --query 'imageIds[*]' --output json > images.json
-        if [ -s images.json ] && [ "$(cat images.json)" != "[]" ]; then
-          # Keep latest 5 images, delete the rest
-          aws ecr describe-images --repository-name $ECR_REPOSITORY --region $AWS_REGION \
-            --query 'sort_by(imageDetails,&imagePushedAt)[:-5].imageDigest' --output json > old_images.json
-          if [ -s old_images.json ] && [ "$(cat old_images.json)" != "[]" ]; then
-            aws ecr batch-delete-image --repository-name $ECR_REPOSITORY --region $AWS_REGION \
-              --image-ids "$(cat old_images.json | jq 'map({imageDigest: .})')"
-            echo "✅ Old ECR images cleaned up"
-          else
-            echo "ℹ️ No old images to clean up"
-          fi
+        echo "🧹 Cleaning up old ECR images (keeping latest 10)..."
+        
+        # Get all images sorted by push date (oldest first)
+        OLD_IMAGES=$(aws ecr describe-images \
+          --repository-name $ECR_REPOSITORY \
+          --region $AWS_REGION \
+          --query 'sort_by(imageDetails,&imagePushedAt)[:-10].[imageDigest,imageTags[0]]' \
+          --output json)
+        
+        if [ "$OLD_IMAGES" != "[]" ] && [ "$OLD_IMAGES" != "null" ]; then
+          echo "Found $(echo $OLD_IMAGES | jq length) old images to delete"
+          
+          # Convert to format needed for batch-delete-image
+          IMAGE_IDS=$(echo $OLD_IMAGES | jq 'map({imageDigest: .[0]})')
+          
+          # Delete old images
+          aws ecr batch-delete-image \
+            --repository-name $ECR_REPOSITORY \
+            --region $AWS_REGION \
+            --image-ids "$IMAGE_IDS"
+          
+          echo "✅ Old ECR images cleaned up (kept latest 10)"
         else
-          echo "ℹ️ No ECR images found"
+          echo "ℹ️ No old images to clean up (less than 10 images total)"
         fi
 
     - name: Delete ECR Repository
