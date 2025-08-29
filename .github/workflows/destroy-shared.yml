@@ -29,6 +29,17 @@ jobs:
         role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Get backend configurations from Parameter Store
+      run: |
+        echo "🔐 Fetching secure backend configurations..."
+        aws ssm get-parameter \
+          --name "/terraform/backend/shopmate-shared" \
+          --with-decryption \
+          --query "Parameter.Value" \
+          --output text > infra/terraform/shared/backend.hcl
+        
+        echo "✅ Backend configurations retrieved securely"
+
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
@@ -37,7 +48,7 @@ jobs:
     - name: Destroy ECR and DynamoDB (preserve OIDC role)
       working-directory: infra/terraform/shared
       run: |
-        terraform init -reconfigure
+        terraform init -reconfigure -backend-config=backend.hcl
         
         # Destroy specific resources, keeping OIDC role
         terraform destroy -target=aws_ecr_repository.shopmate -auto-approve
@@ -66,5 +77,5 @@ jobs:
         echo "   terraform destroy -target=aws_iam_role_policy.github_actions_policy -auto-approve"
         echo ""
         echo "🔄 To restore everything:"
-        echo "   1. Run: ./bootstrap-oidc.sh"
+        echo "   1. Run: ./bootstrap-infrastructure.sh"
         echo "   2. Update GitHub secret: AWS_GITHUB_ACTIONS_ROLE_ARN"

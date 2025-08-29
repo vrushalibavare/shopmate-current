@@ -51,10 +51,11 @@ echo "✅ Found running task: $(basename $TASK_ARN)"
 echo ""
 echo "🧪 Test 1: ECS Exec Access"
 echo "-------------------------"
+CONTAINER_NAME="shopmate-container-$ENVIRONMENT"
 if aws ecs execute-command \
   --cluster $CLUSTER_NAME \
   --task $TASK_ARN \
-  --container shopmate-app \
+  --container $CONTAINER_NAME \
   --interactive \
   --command "echo 'ECS Exec access verified'" \
   --region $REGION >/dev/null 2>&1; then
@@ -112,7 +113,7 @@ echo "Executing comprehensive security test..."
 aws ecs execute-command \
   --cluster $CLUSTER_NAME \
   --task $TASK_ARN \
-  --container shopmate-app \
+  --container $CONTAINER_NAME \
   --interactive \
   --command "sh -c '$(cat /tmp/shell-test.sh)'" \
   --region $REGION 2>/dev/null || echo "❌ Could not execute comprehensive test"
