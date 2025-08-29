@@ -5,8 +5,24 @@ echo "🔐 Deploying shared infrastructure (ECR + OIDC + State Locking)..."
 
 # Deploy all shared infrastructure
 cd infra/terraform/shared
-terraform init
-terraform apply -auto-approve
+
+# Get backend configuration for shared infrastructure
+aws ssm get-parameter \
+  --name "/terraform/backend/shopmate-shared" \
+  --with-decryption \
+  --query "Parameter.Value" \
+  --output text > backend.hcl
+
+terraform init -reconfigure -backend-config=backend.hcl
+
+# Check if DynamoDB table exists, disable locking if it doesn't
+if aws dynamodb describe-table --table-name terraform-state-locks >/dev/null 2>&1; then
+  echo "✅ DynamoDB table exists, using state locking"
+  terraform apply -auto-approve
+else
+  echo "⚠️ DynamoDB table doesn't exist, disabling locking for initial deployment"
+  terraform apply -auto-approve -lock=false
+fi
 
 # Get the role ARN
 ROLE_ARN=$(terraform output -raw github_actions_role_arn)
