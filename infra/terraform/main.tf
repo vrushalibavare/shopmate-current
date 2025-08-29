@@ -41,6 +41,19 @@ provider "aws" {
 }
 
 # ============================================================================
+# SHARED INFRASTRUCTURE REFERENCE
+# ============================================================================
+# Reference to shared ECR repository from remote state
+data "terraform_remote_state" "shared" {
+  backend = "s3"
+  config = {
+    bucket = "vrush-tfstate-bucket"
+    key    = "shopmate/shared/terraform.tfstate"
+    region = var.aws_region
+  }
+}
+
+# ============================================================================
 # INFRASTRUCTURE COMPONENTS
 # ============================================================================
 # All infrastructure components are defined in separate files:
