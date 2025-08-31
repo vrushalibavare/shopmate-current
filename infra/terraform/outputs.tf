@@ -5,7 +5,7 @@
 
 output "ecr_repository_url" {
   description = "ECR repository URL for Docker image storage"
-  value       = data.terraform_remote_state.shared.outputs.ecr_repository_url
+  value       = data.aws_ecr_repository.shopmate.repository_url
 }
 
 output "ecs_cluster_name" {

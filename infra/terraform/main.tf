@@ -43,14 +43,17 @@ provider "aws" {
 # ============================================================================
 # SHARED INFRASTRUCTURE REFERENCE
 # ============================================================================
-# Reference to shared ECR repository from remote state
-data "terraform_remote_state" "shared" {
-  backend = "s3"
-  config = {
-    bucket = "vrush-tfstate-bucket"
-    key    = "shopmate/shared/terraform.tfstate"
-    region = var.aws_region
-  }
+# Get shared resources directly from AWS instead of remote state
+# This eliminates the need to expose backend configuration
+
+# Get ECR repository (the main thing we need from shared state)
+data "aws_ecr_repository" "shopmate" {
+  name = "shopmate"
+}
+
+# Get DynamoDB table for state locking
+data "aws_dynamodb_table" "terraform_locks" {
+  name = "terraform-state-locks"
 }
 
 # ============================================================================

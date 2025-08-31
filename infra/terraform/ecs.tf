@@ -48,7 +48,7 @@ resource "aws_ecs_task_definition" "shopmate" {
   container_definitions = jsonencode([
     {
       name      = "shopmate-container-${var.environment}"                                             # Container name
-      image     = "${data.terraform_remote_state.shared.outputs.ecr_repository_url}:${var.image_tag}" # From shared remote state
+      image     = "${data.aws_ecr_repository.shopmate.repository_url}:${var.image_tag}" # From shared ECR repository
       essential = true                                                                                # If this container stops, stop the task
 
       # Network configuration

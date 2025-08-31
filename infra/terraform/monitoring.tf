@@ -63,7 +63,7 @@ resource "aws_ecs_task_definition" "prometheus" {
   container_definitions = jsonencode([
     {
       name      = "prometheus"
-      image     = "${data.terraform_remote_state.shared.outputs.ecr_repository_url}:prometheus"
+      image     = "${data.aws_ecr_repository.shopmate.repository_url}:prometheus"
       essential = true
 
       portMappings = [
