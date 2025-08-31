@@ -47,9 +47,9 @@ resource "aws_ecs_task_definition" "shopmate" {
   # Container configuration
   container_definitions = jsonencode([
     {
-      name      = "shopmate-container-${var.environment}"                                             # Container name
+      name      = "shopmate-container-${var.environment}"                               # Container name
       image     = "${data.aws_ecr_repository.shopmate.repository_url}:${var.image_tag}" # From shared ECR repository
-      essential = true                                                                                # If this container stops, stop the task
+      essential = true                                                                  # If this container stops, stop the task
 
       # Network configuration
       portMappings = [
