@@ -19,7 +19,7 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"
 
-  name = "shopmate-vpc-${var.environment}"
+  name = "shopmate-ecs-vpc-${var.environment}"
   cidr = "10.0.0.0/16"
 
   azs             = ["${var.aws_region}a", "${var.aws_region}b"]
@@ -40,7 +40,7 @@ module "vpc" {
 
 # Security Group for Load Balancer (Internet-facing)
 resource "aws_security_group" "alb" {
-  name        = "shopmate-alb-sg-${var.environment}"
+  name        = "shopmate-ecs-alb-sg-${var.environment}"
   description = "Security group for ALB - allows HTTP/HTTPS from internet"
   vpc_id      = module.vpc.vpc_id
 
@@ -98,7 +98,7 @@ resource "aws_security_group" "ecs_tasks" {
 
 # Application Load Balancer (Internet-facing)
 resource "aws_lb" "shopmate" {
-  name               = "shopmate-alb-${var.environment}"
+  name               = "shopmate-ecs-alb-${var.environment}"
   internal           = false                       # Internet-facing
   load_balancer_type = "application"               # Layer 7 load balancer
   security_groups    = [aws_security_group.alb.id] # Uses ALB security group
@@ -111,7 +111,7 @@ resource "aws_lb" "shopmate" {
 
 # Target Group for main application
 resource "aws_lb_target_group" "shopmate" {
-  name        = "shopmate-tg-${var.environment}"
+  name        = "shopmate-ecs-tg-${var.environment}"
   port        = 3000   # Node.js app port
   protocol    = "HTTP" # Internal communication
   vpc_id      = module.vpc.vpc_id

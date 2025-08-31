@@ -26,7 +26,7 @@ resource "aws_ecs_cluster" "shopmate" {
 
 # Log group for main application container logs
 resource "aws_cloudwatch_log_group" "shopmate" {
-  name              = "/ecs/shopmate-lg-${var.environment}"
+  name              = "/ecs/shopmate-ecs-lg-${var.environment}"
   retention_in_days = 30 # Keep logs for 30 days (cost optimization)
 }
 
@@ -36,7 +36,7 @@ resource "aws_cloudwatch_log_group" "shopmate" {
 
 # Task definition defines how containers should run
 resource "aws_ecs_task_definition" "shopmate" {
-  family                   = "shopmate-td-${var.environment}"
+  family                   = "shopmate-ecs-td-${var.environment}"
   network_mode             = "awsvpc"                                 # Each task gets its own ENI
   requires_compatibilities = ["FARGATE"]                              # Serverless containers
   cpu                      = var.task_cpu                             # From variables (environment-specific)
@@ -47,7 +47,7 @@ resource "aws_ecs_task_definition" "shopmate" {
   # Container configuration
   container_definitions = jsonencode([
     {
-      name      = "shopmate-container-${var.environment}"                               # Container name
+      name      = "shopmate-ecs-container-${var.environment}"                               # Container name
       image     = "${data.aws_ecr_repository.shopmate.repository_url}:${var.image_tag}" # From shared ECR repository
       essential = true                                                                  # If this container stops, stop the task
 
@@ -105,7 +105,7 @@ resource "aws_ecs_task_definition" "shopmate" {
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.shopmate.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "shopmate-logs-${var.environment}"
+          "awslogs-stream-prefix" = "shopmate-ecs-logs-${var.environment}"
         }
       }
     }
@@ -118,7 +118,7 @@ resource "aws_ecs_task_definition" "shopmate" {
 
 # ECS Service manages running containers and integrates with load balancer
 resource "aws_ecs_service" "shopmate" {
-  name            = "shopmate-service-${var.environment}"
+  name            = "shopmate-ecs-service-${var.environment}"
   cluster         = aws_ecs_cluster.shopmate.id
   task_definition = aws_ecs_task_definition.shopmate.arn
   desired_count   = var.app_count_min # Initial number of containers
@@ -137,7 +137,7 @@ resource "aws_ecs_service" "shopmate" {
   # Load balancer integration
   load_balancer {
     target_group_arn = aws_lb_target_group.shopmate.arn        # From networking.tf
-    container_name   = "shopmate-container-${var.environment}" # Must match container name
+    container_name   = "shopmate-ecs-container-${var.environment}" # Must match container name
     container_port   = 3000                                    # Must match container port
   }
 

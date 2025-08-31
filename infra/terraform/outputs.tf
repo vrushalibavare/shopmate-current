@@ -20,7 +20,7 @@ output "application_url" {
 
 output "cloudwatch_dashboard_url" {
   description = "CloudWatch dashboard URL for monitoring"
-  value       = "https://console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=shopmate-dashboard-${var.environment}"
+  value       = "https://console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=shopmate-ecs-dashboard-${var.environment}"
 }
 
 output "grafana_url" {

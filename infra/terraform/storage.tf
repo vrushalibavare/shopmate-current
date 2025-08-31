@@ -10,7 +10,7 @@
 
 # Products table - E-commerce product catalog
 resource "aws_dynamodb_table" "products" {
-  name         = "shopmate-products-${var.environment}"
+  name         = "shopmate-ecs-products-${var.environment}"
   billing_mode = "PAY_PER_REQUEST" # Serverless billing
   hash_key     = "id"              # Primary key
 
@@ -22,7 +22,7 @@ resource "aws_dynamodb_table" "products" {
 
 # Orders table - Customer order history
 resource "aws_dynamodb_table" "orders" {
-  name         = "shopmate-orders-${var.environment}"
+  name         = "shopmate-ecs-orders-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "id"
 
@@ -34,7 +34,7 @@ resource "aws_dynamodb_table" "orders" {
 
 # Carts table - Shopping cart data (stateless architecture)
 resource "aws_dynamodb_table" "carts" {
-  name         = "shopmate-carts-${var.environment}"
+  name         = "shopmate-ecs-carts-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "userId"
 
@@ -46,7 +46,7 @@ resource "aws_dynamodb_table" "carts" {
 
 # Sessions table - User sessions (enables stateless containers)
 resource "aws_dynamodb_table" "sessions" {
-  name         = "shopmate-sessions-${var.environment}"
+  name         = "shopmate-ecs-sessions-${var.environment}"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "id"
 

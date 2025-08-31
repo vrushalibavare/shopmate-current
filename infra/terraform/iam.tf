@@ -18,7 +18,7 @@
 
 # ECS Task Execution Role - Used by ECS service to start containers
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "shopmate-execution-role-${var.environment}"
+  name = "shopmate-ecs-execution-role-${var.environment}"
 
   # Trust policy - allows ECS service to assume this role
   assume_role_policy = jsonencode({
@@ -37,7 +37,7 @@ resource "aws_iam_role" "ecs_task_execution_role" {
 
 # ECS Task Role - Used by application containers at runtime
 resource "aws_iam_role" "ecs_task_role" {
-  name = "shopmate-task-role-${var.environment}"
+  name = "shopmate-ecs-task-role-${var.environment}"
 
   # Trust policy - allows ECS tasks to assume this role
   assume_role_policy = jsonencode({
@@ -60,7 +60,7 @@ resource "aws_iam_role" "ecs_task_role" {
 
 # DynamoDB access policy - Application data operations
 resource "aws_iam_policy" "dynamodb_access" {
-  name        = "shopmate-dynamodb-access-${var.environment}"
+  name        = "shopmate-ecs-dynamodb-access-${var.environment}"
   description = "Allow CRUD operations on ShopMate DynamoDB tables"
 
   policy = jsonencode({
@@ -92,7 +92,7 @@ resource "aws_iam_policy" "dynamodb_access" {
 
 # Secrets Manager access policy - Application secrets
 resource "aws_iam_policy" "secrets_access" {
-  name        = "shopmate-secrets-access-${var.environment}"
+  name        = "shopmate-ecs-secrets-access-${var.environment}"
   description = "Allow reading ShopMate application secrets"
 
   policy = jsonencode({
@@ -114,7 +114,7 @@ resource "aws_iam_policy" "secrets_access" {
 
 # CloudWatch access policy - Monitoring and logging
 resource "aws_iam_policy" "cloudwatch_read" {
-  name        = "shopmate-cloudwatch-read-${var.environment}"
+  name        = "shopmate-ecs-cloudwatch-read-${var.environment}"
   description = "Allow read access to CloudWatch metrics and logs for Grafana"
 
   policy = jsonencode({
