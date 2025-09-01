@@ -47,7 +47,7 @@ resource "aws_ecs_task_definition" "shopmate" {
   # Container configuration
   container_definitions = jsonencode([
     {
-      name      = "shopmate-ecs-container-${var.environment}"                               # Container name
+      name      = "shopmate-ecs-container-${var.environment}"                           # Container name
       image     = "${data.aws_ecr_repository.shopmate.repository_url}:${var.image_tag}" # From shared ECR repository
       essential = true                                                                  # If this container stops, stop the task
 
@@ -136,9 +136,9 @@ resource "aws_ecs_service" "shopmate" {
 
   # Load balancer integration
   load_balancer {
-    target_group_arn = aws_lb_target_group.shopmate.arn        # From networking.tf
+    target_group_arn = aws_lb_target_group.shopmate.arn            # From networking.tf
     container_name   = "shopmate-ecs-container-${var.environment}" # Must match container name
-    container_port   = 3000                                    # Must match container port
+    container_port   = 3000                                        # Must match container port
   }
 
   # Ensure load balancer is ready before creating service
