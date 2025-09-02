@@ -24,6 +24,7 @@ on:
 
 jobs:
   deploy:
+    if: github.event.pull_request.merged == true
     uses: ./.github/workflows/deploy-reusable.yml
     with:
       environment: prod
