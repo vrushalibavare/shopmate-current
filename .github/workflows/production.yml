@@ -25,6 +25,9 @@ on:
 jobs:
   deploy:
     if: github.event.pull_request.merged == true
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/deploy-reusable.yml
     with:
       environment: prod
