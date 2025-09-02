@@ -11,7 +11,7 @@ data "aws_iam_openid_connect_provider" "github" {
 # IAM role for GitHub Actions (import if exists)
 resource "aws_iam_role" "github_actions" {
   name = "shopmate-github-actions-role"
-  
+
   lifecycle {
     ignore_changes = [assume_role_policy]
   }
@@ -42,7 +42,7 @@ resource "aws_iam_role" "github_actions" {
 resource "aws_iam_role_policy" "github_actions_policy" {
   name = "shopmate-deployment-policy"
   role = aws_iam_role.github_actions.id
-  
+
   lifecycle {
     ignore_changes = [policy]
   }
