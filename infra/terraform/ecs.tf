@@ -124,8 +124,8 @@ resource "aws_ecs_service" "shopmate" {
   desired_count   = var.app_count_min # Initial number of containers
   launch_type     = "FARGATE"         # Serverless containers
 
-  # Enable ECS Exec for dev environment only (debugging capability)
-  enable_execute_command = var.environment == "dev" ? true : false
+  # Enable ECS Exec for dev and uat environments (debugging capability)
+  enable_execute_command = var.environment == "prod" ? false : true
 
   # Network configuration
   network_configuration {
