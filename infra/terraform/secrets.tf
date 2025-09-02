@@ -29,7 +29,7 @@ resource "random_password" "session_secret" {
 }
 
 resource "aws_secretsmanager_secret" "session_secret" {
-  name                           = "shopmate-session-key-${var.environment}"
+  name                           = "shopmate-ecs-session-key-${var.environment}"
   description                    = "Session secret for ShopMate ${var.environment}"
   force_overwrite_replica_secret = true
   recovery_window_in_days        = 0

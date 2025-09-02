@@ -8,9 +8,13 @@ data "aws_iam_openid_connect_provider" "github" {
   arn = "arn:aws:iam::255945442255:oidc-provider/token.actions.githubusercontent.com"
 }
 
-# IAM role for GitHub Actions
+# IAM role for GitHub Actions (import if exists)
 resource "aws_iam_role" "github_actions" {
   name = "shopmate-github-actions-role"
+
+  lifecycle {
+    ignore_changes = [assume_role_policy]
+  }
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -34,10 +38,14 @@ resource "aws_iam_role" "github_actions" {
   })
 }
 
-# IAM policy for deployment permissions
+# IAM policy for deployment permissions (import if exists)
 resource "aws_iam_role_policy" "github_actions_policy" {
   name = "shopmate-deployment-policy"
   role = aws_iam_role.github_actions.id
+
+  lifecycle {
+    ignore_changes = [policy]
+  }
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -57,7 +65,10 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "secretsmanager:*",
           "cloudwatch:*",
           "s3:*",
-          "application-autoscaling:*"
+          "application-autoscaling:*",
+          # Parameter Store permissions for secure backend configuration access
+          "ssm:GetParameter",
+          "ssm:PutParameter"
         ]
         Resource = "*"
       }

@@ -72,7 +72,7 @@ resource "aws_cloudwatch_log_metric_filter" "application_errors" {
 
 # Comprehensive dashboard with CPU/Memory consumption patterns
 resource "aws_cloudwatch_dashboard" "shopmate" {
-  dashboard_name = "shopmate-dashboard-${var.environment}"
+  dashboard_name = "shopmate-ecs-dashboard-${var.environment}"
 
   dashboard_body = jsonencode({
     widgets = [

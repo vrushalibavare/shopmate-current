@@ -1,11 +1,11 @@
-# Production: Pure distroless (no debug)
+# UAT: Distroless with debug shell
 FROM node:18-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 COPY . .
 
-FROM gcr.io/distroless/nodejs18-debian11
+FROM gcr.io/distroless/nodejs18-debian11:debug
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app .

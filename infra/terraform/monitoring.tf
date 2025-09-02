@@ -5,7 +5,7 @@
 
 # Prometheus Security Group
 resource "aws_security_group" "prometheus" {
-  name_prefix = "prometheus-${var.environment}"
+  name_prefix = "prometheus-ecs-${var.environment}"
   vpc_id      = module.vpc.vpc_id
 
   ingress {
@@ -25,13 +25,13 @@ resource "aws_security_group" "prometheus" {
 
 # Prometheus CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "prometheus" {
-  name              = "/ecs/prometheus-${var.environment}"
+  name              = "/ecs/prometheus-ecs-${var.environment}"
   retention_in_days = 30
 }
 
 # Prometheus ECS Service
 resource "aws_ecs_service" "prometheus" {
-  name            = "prometheus-${var.environment}"
+  name            = "prometheus-ecs-${var.environment}"
   cluster         = aws_ecs_cluster.shopmate.id
   task_definition = aws_ecs_task_definition.prometheus.arn
   desired_count   = 1
@@ -63,7 +63,7 @@ resource "aws_ecs_task_definition" "prometheus" {
   container_definitions = jsonencode([
     {
       name      = "prometheus"
-      image     = "${data.terraform_remote_state.shared.outputs.ecr_repository_url}:prometheus"
+      image     = "${data.aws_ecr_repository.shopmate.repository_url}:prometheus"
       essential = true
 
       portMappings = [

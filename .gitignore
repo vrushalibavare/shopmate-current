@@ -1,41 +1,27 @@
 # Terraform
-**/.terraform/*
 *.tfstate
 *.tfstate.*
-crash.log
-crash.*.log
-*.tfvars
-*.tfvars.json
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-.terraformrc
-terraform.rc
+.terraform/
+.terraform.lock.hcl
+backend.hcl
 
-# Node.js
+# Bootstrap and deployment scripts (contain sensitive configs)
+*.sh
+!infra/**/*.sh
+!testing/**/*.sh
+
+# Dependencies
 node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
+npm-debug.log*
+
+# Environment
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# OS specific
-.DS_Store
-Thumbs.db
 
 # IDE
-.idea/
 .vscode/
-*.swp
-*.swo
+.idea/
 
-# Build
-dist/
-build/
-.next/
-out/
+# OS
+.DS_Store
+Thumbs.db
