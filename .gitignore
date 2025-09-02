@@ -5,9 +5,10 @@
 .terraform.lock.hcl
 backend.hcl
 
-# Bootstrap scripts (contain sensitive configs)
-bootstrap-*.sh
-destroy-*.sh
+# Bootstrap and deployment scripts (contain sensitive configs)
+*.sh
+!infra/**/*.sh
+!testing/**/*.sh
 
 # Dependencies
 node_modules/
