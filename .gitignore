@@ -5,6 +5,10 @@
 .terraform.lock.hcl
 backend.hcl
 
+# Bootstrap scripts (contain sensitive configs)
+bootstrap-*.sh
+destroy-*.sh
+
 # Dependencies
 node_modules/
 npm-debug.log*
