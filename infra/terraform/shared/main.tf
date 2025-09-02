@@ -24,6 +24,7 @@ provider "aws" {
 resource "aws_ecr_repository" "shopmate" {
   name                 = "shopmate"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 }
 
 resource "aws_ecr_lifecycle_policy" "shopmate" {
