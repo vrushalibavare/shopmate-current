@@ -7,4 +7,4 @@ task_memory         = "1024"
 domain_name         = "shopmate-ecs.uat.sctp-sandbox.com"
 route53_zone_name   = "sctp-sandbox.com"
 create_route53_zone = false
-image_tag           = "prod-latest"
+image_tag           = "uat-latest"

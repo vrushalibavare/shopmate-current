@@ -196,10 +196,17 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest app/
+        docker build -f app/Dockerfile.dev -t $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest app/
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev-latest
 
-    - name: Build and push production image (secure distroless, no shell)
+    - name: Build and push UAT image (distroless with debug)
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build -f app/Dockerfile.uat -t $ECR_REGISTRY/$ECR_REPOSITORY:uat-latest app/
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:uat-latest
+
+    - name: Build and push production image (pure distroless, no debug)
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
@@ -277,4 +284,4 @@ jobs:
         echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
         echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"
         echo "📷 Source commit: ${{ github.sha }}"
-        echo "🔒 Images built: dev-latest (dev with shell), prod-latest (secure distroless for uat/prod)"
+        echo "🔒 Images built: dev-latest (Alpine+shell), uat-latest (distroless+debug), prod-latest (pure distroless)"
