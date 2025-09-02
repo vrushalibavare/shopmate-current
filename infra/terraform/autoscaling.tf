@@ -32,7 +32,7 @@ resource "aws_appautoscaling_target" "ecs_target" {
 
 # CPU-based auto scaling with target tracking
 resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
-  name               = "shopmate-cpu-scaling-${var.environment}"
+  name               = "shopmate-ecs-cpu-scaling-${var.environment}"
   policy_type        = "TargetTrackingScaling" # Automatically adjust to maintain target
   resource_id        = aws_appautoscaling_target.ecs_target.resource_id
   scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension
@@ -56,7 +56,7 @@ resource "aws_appautoscaling_policy" "ecs_cpu_policy" {
 
 # Memory-based auto scaling with target tracking
 resource "aws_appautoscaling_policy" "ecs_memory_policy" {
-  name               = "shopmate-memory-scaling-${var.environment}"
+  name               = "shopmate-ecs-memory-scaling-${var.environment}"
   policy_type        = "TargetTrackingScaling" # Automatically adjust to maintain target
   resource_id        = aws_appautoscaling_target.ecs_target.resource_id
   scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension

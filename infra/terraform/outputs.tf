@@ -5,7 +5,7 @@
 
 output "ecr_repository_url" {
   description = "ECR repository URL for Docker image storage"
-  value       = data.terraform_remote_state.shared.outputs.ecr_repository_url
+  value       = data.aws_ecr_repository.shopmate.repository_url
 }
 
 output "ecs_cluster_name" {
@@ -20,7 +20,7 @@ output "application_url" {
 
 output "cloudwatch_dashboard_url" {
   description = "CloudWatch dashboard URL for monitoring"
-  value       = "https://console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=shopmate-dashboard-${var.environment}"
+  value       = "https://console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=shopmate-ecs-dashboard-${var.environment}"
 }
 
 output "grafana_url" {

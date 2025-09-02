@@ -3,6 +3,9 @@
 # ============================================================================
 # Identity and Access Management for ECS tasks and AWS service integration
 #
+# NOTE: GitHub Actions deployment permissions (including Parameter Store access
+# for secure backend configuration) are defined in shared/github-oidc.tf
+#
 # CREATION FLOW:
 # 1. Secrets Generation & Storage (Application Security)
 # 2. IAM Roles (Identity Definitions)
@@ -15,7 +18,7 @@
 
 # ECS Task Execution Role - Used by ECS service to start containers
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "shopmate-execution-role-${var.environment}"
+  name = "shopmate-ecs-execution-role-${var.environment}"
 
   # Trust policy - allows ECS service to assume this role
   assume_role_policy = jsonencode({
@@ -34,7 +37,7 @@ resource "aws_iam_role" "ecs_task_execution_role" {
 
 # ECS Task Role - Used by application containers at runtime
 resource "aws_iam_role" "ecs_task_role" {
-  name = "shopmate-task-role-${var.environment}"
+  name = "shopmate-ecs-task-role-${var.environment}"
 
   # Trust policy - allows ECS tasks to assume this role
   assume_role_policy = jsonencode({
@@ -57,7 +60,7 @@ resource "aws_iam_role" "ecs_task_role" {
 
 # DynamoDB access policy - Application data operations
 resource "aws_iam_policy" "dynamodb_access" {
-  name        = "shopmate-dynamodb-access-${var.environment}"
+  name        = "shopmate-ecs-dynamodb-access-${var.environment}"
   description = "Allow CRUD operations on ShopMate DynamoDB tables"
 
   policy = jsonencode({
@@ -89,7 +92,7 @@ resource "aws_iam_policy" "dynamodb_access" {
 
 # Secrets Manager access policy - Application secrets
 resource "aws_iam_policy" "secrets_access" {
-  name        = "shopmate-secrets-access-${var.environment}"
+  name        = "shopmate-ecs-secrets-access-${var.environment}"
   description = "Allow reading ShopMate application secrets"
 
   policy = jsonencode({
@@ -111,7 +114,7 @@ resource "aws_iam_policy" "secrets_access" {
 
 # CloudWatch access policy - Monitoring and logging
 resource "aws_iam_policy" "cloudwatch_read" {
-  name        = "shopmate-cloudwatch-read-${var.environment}"
+  name        = "shopmate-ecs-cloudwatch-read-${var.environment}"
   description = "Allow read access to CloudWatch metrics and logs for Grafana"
 
   policy = jsonencode({
@@ -136,11 +139,10 @@ resource "aws_iam_policy" "cloudwatch_read" {
   })
 }
 
-# ECS Exec access policy - Dev environment debugging only
+# ECS Exec access policy - All environments (security controlled by container image)
 resource "aws_iam_policy" "ecs_exec_access" {
-  count       = var.environment == "dev" ? 1 : 0
   name        = "shopmate-ecs-exec-access-${var.environment}"
-  description = "Allow ECS Exec access for debugging in dev environment"
+  description = "Allow ECS Exec access for debugging (security controlled by container capabilities)"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -193,9 +195,8 @@ resource "aws_iam_role_policy_attachment" "task_role_cloudwatch" {
   policy_arn = aws_iam_policy.cloudwatch_read.arn
 }
 
-# Attach ECS Exec access to task role (dev environment only)
+# Attach ECS Exec access to task role (all environments)
 resource "aws_iam_role_policy_attachment" "task_role_ecs_exec" {
-  count      = var.environment == "dev" ? 1 : 0
   role       = aws_iam_role.ecs_task_role.name
-  policy_arn = aws_iam_policy.ecs_exec_access[0].arn
+  policy_arn = aws_iam_policy.ecs_exec_access.arn
 }

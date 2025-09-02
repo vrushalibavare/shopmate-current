@@ -1,3 +1,20 @@
+# ============================================================================
+# PRODUCTION DEPLOYMENT WORKFLOW
+# ============================================================================
+# This workflow deploys to the production environment using the reusable workflow
+# 
+# Purpose:
+# - Promotes code from stage → production branch
+# - Uses existing prod-latest image (built in dev workflow)
+# - Applies GitHub environment protection for production approvals
+# - Uses secure distroless image with debug capabilities
+# 
+# Triggered by: PR merge from stage to production branch
+# Reusable workflow: deploy-reusable.yml
+# Environment: prod (Production)
+# Backend config: Fetched securely from Parameter Store
+# ============================================================================
+
 name: Deploy to Production
 
 on:
@@ -5,176 +22,16 @@ on:
     branches: [ production ]
     types: [ closed ]
 
-env:
-  AWS_REGION: ap-southeast-1
-  ECR_REPOSITORY: shopmate
-  ENVIRONMENT: prod
-
 jobs:
-  check-source:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'production' && github.event.pull_request.head.ref == 'stage'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Validate source branch
-        run: echo "PR from stage to production approved"
-
-  validate:
-    needs: check-source
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Validate prod environment
-      run: |
-        echo "Validating prod environment..."
-        if [[ "${{ env.ENVIRONMENT }}" != "prod" ]]; then
-          echo "❌ Expected prod environment, got ${{ env.ENVIRONMENT }}"
-          exit 1
-        fi
-        if [[ ! -f "infra/terraform/terraform.tfvars.prod" ]]; then
-          echo "❌ Missing terraform.tfvars.prod file"
-          exit 1
-        fi
-        aws sts get-caller-identity
-        echo "✅ Production environment validation passed"
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.11.4
-
-    - name: Terraform Format Check (Main)
-      working-directory: infra/terraform
-      run: terraform fmt -check
-
-    - name: Terraform Format Check (Shared)
-      working-directory: infra/terraform/shared
-      run: terraform fmt -check
-
-    - name: Terraform Init (Main)
-      working-directory: infra/terraform
-      run: terraform init -reconfigure
-
-    - name: Terraform Init (Shared)
-      working-directory: infra/terraform/shared
-      run: terraform init -reconfigure
-
-    - name: Terraform Validate (Main)
-      working-directory: infra/terraform
-      run: terraform validate
-
-    - name: Terraform Validate (Shared)
-      working-directory: infra/terraform/shared
-      run: terraform validate
-
-    - name: Terraform Plan
-      working-directory: infra/terraform
-      run: |
-        terraform workspace select prod || terraform workspace new prod
-        terraform plan -var-file="terraform.tfvars.prod"
-
   deploy:
-    needs: validate
-    runs-on: ubuntu-latest
-    environment: production
+    if: github.event.pull_request.merged == true
     permissions:
       id-token: write
       contents: read
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: 1.11.4
-
-    - name: Validate production image exists
-      run: |
-        echo "🔒 Validating production image exists for production deployment..."
-        if ! aws ecr describe-images --repository-name shopmate --image-ids imageTag=prod-latest --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
-          echo "❌ Production image 'prod-latest' not found. Please run deployment on 'dev' environment first."
-          exit 1
-        fi
-        echo "✅ Production image found, using secure distroless image"
-
-    - name: Deploy shared infrastructure first
-      working-directory: infra/terraform/shared
-      run: |
-        terraform init -reconfigure
-        terraform apply -auto-approve
-
-    - name: Deploy with Terraform (use secure prod image)
-      working-directory: infra/terraform
-      run: |
-        terraform init -reconfigure
-        terraform workspace select prod || terraform workspace new prod
-        terraform apply -var-file="terraform.tfvars.prod" -auto-approve
-        echo "✅ Production deployed using prod-latest image (source: ${{ github.sha }})"
-        echo "🔒 Using secure distroless image without shell access"
-
-    - name: Force ECS service updates
-      env:
-        AWS_REGION: ${{ env.AWS_REGION }}
-        ENVIRONMENT: ${{ env.ENVIRONMENT }}
-      run: |
-        cd infra/terraform
-        terraform workspace select $ENVIRONMENT
-        CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
-        MAIN_SERVICE=$(terraform output -raw main_service_name)
-        PROMETHEUS_SERVICE=$(terraform output -raw prometheus_service_name)
-        GRAFANA_SERVICE=$(terraform output -raw grafana_service_name)
-        
-        # Update main application service
-        aws ecs update-service \
-          --cluster $CLUSTER_NAME \
-          --service $MAIN_SERVICE \
-          --force-new-deployment \
-          --region $AWS_REGION
-        
-        # Update Prometheus service if it exists
-        if aws ecs describe-services --cluster $CLUSTER_NAME --services $PROMETHEUS_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
-          aws ecs update-service \
-            --cluster $CLUSTER_NAME \
-            --service $PROMETHEUS_SERVICE \
-            --force-new-deployment \
-            --region $AWS_REGION
-        fi
-        
-        # Update Grafana service if it exists
-        if aws ecs describe-services --cluster $CLUSTER_NAME --services $GRAFANA_SERVICE --region $AWS_REGION >/dev/null 2>&1; then
-          aws ecs update-service \
-            --cluster $CLUSTER_NAME \
-            --service $GRAFANA_SERVICE \
-            --force-new-deployment \
-            --region $AWS_REGION
-        fi
-
-    - name: Get deployment URLs
-      working-directory: infra/terraform
-      run: |
-        terraform workspace select prod
-        echo "✅ Production deployment completed successfully!"
-        echo "🌐 Application URL: $(terraform output -raw application_url)"
-        echo "📊 CloudWatch Dashboard: $(terraform output -raw cloudwatch_dashboard_url)"
-        echo "📈 Grafana Dashboard: $(terraform output -raw grafana_url)"
-        echo "🔍 Prometheus Metrics: $(terraform output -raw prometheus_url)"
-        echo "📷 Source commit: ${{ github.sha }}"
-        echo "🔒 Using secure prod-latest image (distroless, no shell access)"
+    uses: ./.github/workflows/deploy-reusable.yml
+    with:
+      environment: prod
+      source_branch: stage
+      target_branch: production
+      github_environment: production
+    secrets: inherit

@@ -37,6 +37,17 @@ jobs:
         role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Get backend configurations from Parameter Store
+      run: |
+        echo "🔐 Fetching secure backend configurations..."
+        aws ssm get-parameter \
+          --name "/terraform/backend/shopmate" \
+          --with-decryption \
+          --query "Parameter.Value" \
+          --output text > infra/terraform/backend.hcl
+        
+        echo "✅ Backend configurations retrieved securely"
+
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
@@ -47,7 +58,7 @@ jobs:
       env:
         ENVIRONMENT: ${{ github.event.inputs.environment }}
       run: |
-        terraform init -reconfigure
+        terraform init -reconfigure -backend-config=backend.hcl
         terraform workspace select $ENVIRONMENT || terraform workspace new $ENVIRONMENT
         terraform destroy -var-file="terraform.tfvars.$ENVIRONMENT" -auto-approve
         echo "✅ $ENVIRONMENT environment destroyed successfully"
